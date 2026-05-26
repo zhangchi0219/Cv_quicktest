@@ -1,0 +1,405 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+  background: #0b0d10;
+  color: #e6e8eb;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 8px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: #8a93a0;
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 70fr 30fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.layout-left,
+.layout-right {
+  min-width: 0; /* allow grid items to shrink below their content width */
+}
+
+.layout-right {
+  background: #11151a;
+  border: 1px solid #2a3038;
+  border-radius: 8px;
+  padding: 16px 18px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #c0c6cc;
+}
+
+.layout-right h2 {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
+  color: #e6e8eb;
+}
+
+.layout-right h3 {
+  font-size: 0.92rem;
+  margin: 18px 0 6px;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.layout-right p {
+  margin: 0 0 8px;
+}
+
+.layout-right ul,
+.layout-right ol {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+}
+
+.layout-right li {
+  margin: 4px 0;
+}
+
+.layout-right code {
+  background: #1a1f26;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  color: #facc15;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.layout-right strong {
+  color: #e6e8eb;
+}
+
+.app-list {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid #2a3038;
+}
+
+.app-list h2 {
+  font-size: 0.98rem;
+  margin: 0 0 10px;
+  color: #e6e8eb;
+}
+
+.app-item {
+  margin: 10px 0;
+  padding: 8px 12px;
+  background: #0d1117;
+  border: 1px solid #1f262e;
+  border-radius: 6px;
+}
+
+.app-item-summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 2px 0;
+}
+
+.app-item-summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-item-summary::before {
+  content: "▸";
+  display: inline-block;
+  color: #93c5fd;
+  font-size: 0.8rem;
+  margin-right: 8px;
+  transition: transform 0.15s ease;
+  vertical-align: middle;
+}
+
+.app-item[open] > .app-item-summary::before {
+  transform: rotate(90deg);
+}
+
+.app-item-title {
+  font-size: 0.92rem;
+  color: #fbbf24;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.app-item .app-tech {
+  display: block;
+  margin: 4px 0 0 18px;
+  font-size: 0.78rem;
+  color: #93c5fd;
+  letter-spacing: 0.2px;
+}
+
+.app-desc {
+  margin: 8px 0 2px;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.controls select {
+  background: #1a1f26;
+  color: #e6e8eb;
+  border: 1px solid #2a3038;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stage video,
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.stage video {
+  transform: scaleX(-1); /* mirror like a selfie */
+}
+
+.stage canvas {
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
+/* Positioning shell for lesson overlays. The mirror (scaleX(-1)) is supplied
+ * by the `.stage canvas` rule above, which targets every descendant canvas of
+ * the stage — both direct (lesson 1) and three.js-nested (lesson 2). Putting
+ * the mirror on this wrapper too would double-flip and reverse the X axis. */
+.lesson-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lesson-canvas-3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.model-loader {
+  position: absolute;
+  inset: 0;
+  background: #0b0d10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px;
+  z-index: 100;
+}
+
+.model-loader-title {
+  margin: 0;
+  font-size: 1rem;
+  color: #e6e8eb;
+}
+
+.model-loader-title.error {
+  color: #ff6b6b;
+}
+
+.model-loader-phase {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8a93a0;
+  min-height: 1.2em;
+  text-align: center;
+}
+
+.progress-bar {
+  width: 70%;
+  max-width: 360px;
+  height: 8px;
+  background: #1a1f26;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  border-radius: 999px;
+  transition: width 0.15s ease-out;
+}
+
+.progress-text {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: #93c5fd;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+
+.lesson-overlay-ui {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(11, 13, 16, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.toggle-pill {
+  padding: 5px 14px;
+  background: transparent;
+  color: #a3b3c4;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.toggle-pill:hover {
+  color: #e6e8eb;
+}
+
+.toggle-pill[aria-pressed="true"] {
+  background: rgba(37, 99, 235, 0.5);
+  color: #fff;
+  border-color: rgba(96, 165, 250, 0.55);
+}
+
+@media (max-width: 600px) {
+  .lesson-overlay-ui {
+    top: 6px;
+    right: 6px;
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .toggle-pill {
+    padding: 3px 10px;
+    font-size: 0.72rem;
+  }
+}
+
+.lesson-nav {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 8px;
+  flex-wrap: wrap;
+}
+
+.lesson-tab {
+  background: #1a1f26;
+  color: #e6e8eb;
+  border: 1px solid #2a3038;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.lesson-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.lesson-description {
+  color: #8a93a0;
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
+.status {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: #8a93a0;
+  min-height: 1.4em;
+}
+
+.error {
+  color: #ff6b6b;
+}
+
+button {
+  background: #2563eb;
+  color: white;
+  border: 0;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

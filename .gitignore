@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+.env
+.env.local
+
+# MediaPipe WASM + models downloaded by `npm run fetch-assets` (~8 MB, regenerable)
+public/mediapipe/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Local Claude Code settings (user-specific permissions / allowlists)
+.claude/settings.local.json
