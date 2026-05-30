@@ -1,208 +1,158 @@
 :root {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
-  background: #0b0d10;
+  background: #05070a;
   color: #e6e8eb;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  overflow: hidden; /* fusion stage is full-bleed; nothing scrolls behind it */
 }
 
 #root {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px;
+  width: 100vw;
+  height: 100vh;
 }
 
+/* ── Full-screen fusion stage (hero / background layer) ───────────────── */
+
+.particle-stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  overflow: hidden;
+  /* Radial deep-space wash so the box reads as a scene before WebGL paints
+   * (and around any 1px rounding gap). The charging "background flash" lives
+   * inside the canvas as a lit backdrop plane — never on the page. */
+  background: radial-gradient(circle at 50% 45%, #0d1320 0%, #05070a 70%);
+}
+
+.particle-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Coulomb-barrier charge meter across the top of the canvas. Fill is driven
+ * imperatively (transform: scaleX(t)) from the animate loop. */
+.charge-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.charge-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #38bdf8, #a78bfa 55%, #fbbf24);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.charge-bar-label {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.74rem;
+  letter-spacing: 1px;
+  color: #bae6fd;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+/* Energy label revealed during the reward window (flash + lock), driven
+ * imperatively via opacity. */
+.fusion-burst-label {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  text-align: center;
+}
+
+.fusion-burst-eq {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fde68a;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+}
+
+.fusion-burst-energy {
+  font-size: 0.85rem;
+  color: #fbbf24;
+  letter-spacing: 1px;
+}
+
+/* ── Header overlay (top-left) ────────────────────────────────────────── */
+
 .page-header {
-  margin-bottom: 8px;
+  position: fixed;
+  top: 20px;
+  left: 24px;
+  z-index: 20;
+  pointer-events: none;
 }
 
 h1 {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   margin: 0 0 4px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
 .subtitle {
-  color: #8a93a0;
-  margin: 0 0 12px;
-  font-size: 0.95rem;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 70fr 30fr;
-  gap: 20px;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.layout-left,
-.layout-right {
-  min-width: 0; /* allow grid items to shrink below their content width */
-}
-
-.layout-right {
-  background: #11151a;
-  border: 1px solid #2a3038;
-  border-radius: 8px;
-  padding: 16px 18px;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  color: #c0c6cc;
-}
-
-.layout-right h2 {
-  font-size: 1.05rem;
-  margin: 0 0 6px;
-  color: #e6e8eb;
-}
-
-.layout-right h3 {
-  font-size: 0.92rem;
-  margin: 18px 0 6px;
-  color: #93c5fd;
-  font-weight: 600;
-}
-
-.layout-right p {
-  margin: 0 0 8px;
-}
-
-.layout-right ul,
-.layout-right ol {
-  margin: 4px 0 8px;
-  padding-left: 22px;
-}
-
-.layout-right li {
-  margin: 4px 0;
-}
-
-.layout-right code {
-  background: #1a1f26;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 0.85em;
-  color: #facc15;
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
-
-.layout-right strong {
-  color: #e6e8eb;
-}
-
-.app-list {
-  margin-top: 22px;
-  padding-top: 14px;
-  border-top: 1px solid #2a3038;
-}
-
-.app-list h2 {
-  font-size: 0.98rem;
-  margin: 0 0 10px;
-  color: #e6e8eb;
-}
-
-.app-item {
-  margin: 10px 0;
-  padding: 8px 12px;
-  background: #0d1117;
-  border: 1px solid #1f262e;
-  border-radius: 6px;
-}
-
-.app-item-summary {
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  padding: 2px 0;
-}
-
-.app-item-summary::-webkit-details-marker {
-  display: none;
-}
-
-.app-item-summary::before {
-  content: "▸";
-  display: inline-block;
-  color: #93c5fd;
-  font-size: 0.8rem;
-  margin-right: 8px;
-  transition: transform 0.15s ease;
-  vertical-align: middle;
-}
-
-.app-item[open] > .app-item-summary::before {
-  transform: rotate(90deg);
-}
-
-.app-item-title {
-  font-size: 0.92rem;
-  color: #fbbf24;
-  font-weight: 600;
-  vertical-align: middle;
-}
-
-.app-item .app-tech {
-  display: block;
-  margin: 4px 0 0 18px;
-  font-size: 0.78rem;
-  color: #93c5fd;
-  letter-spacing: 0.2px;
-}
-
-.app-desc {
-  margin: 8px 0 2px;
+  color: #9aa6b4;
+  margin: 0;
   font-size: 0.85rem;
-  line-height: 1.55;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
 }
 
-.controls {
+/* ── Camera picture-in-picture (bottom-right) ─────────────────────────── */
+
+.pip-camera {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: min(280px, 38vw);
   display: flex;
-  gap: 16px;
-  align-items: center;
-  margin: 12px 0 16px;
-  flex-wrap: wrap;
-}
-
-.controls label {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  font-size: 0.95rem;
-  cursor: pointer;
 }
 
-.controls select {
-  background: #1a1f26;
-  color: #e6e8eb;
-  border: 1px solid #2a3038;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 0.9rem;
-}
-
-.stage {
+.pip-stage {
   position: relative;
   width: 100%;
-  max-width: 960px;
   aspect-ratio: 4 / 3;
   background: #000;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
 }
 
-.stage video,
-.stage canvas {
+.pip-stage video,
+.pip-stage canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -210,50 +160,81 @@ h1 {
   object-fit: cover;
 }
 
-.stage video {
+.pip-stage video {
   transform: scaleX(-1); /* mirror like a selfie */
 }
 
-.stage canvas {
+.pip-overlay {
   pointer-events: none;
-  transform: scaleX(-1);
+  transform: scaleX(-1); /* stay aligned with the mirrored video */
 }
 
-/* Positioning shell for lesson overlays. The mirror (scaleX(-1)) is supplied
- * by the `.stage canvas` rule above, which targets every descendant canvas of
- * the stage — both direct (lesson 1) and three.js-nested (lesson 2). Putting
- * the mirror on this wrapper too would double-flip and reverse the X axis. */
-.lesson-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+.pip-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(11, 13, 16, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-size: 0.78rem;
 }
 
-.lesson-canvas-3d canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
+.pip-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
+
+.pip-controls select {
+  max-width: 110px;
+  background: #1a1f26;
+  color: #e6e8eb;
+  border: 1px solid #2a3038;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+}
+
+.pip-status {
+  color: #8a93a0;
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .pip-camera {
+    width: 46vw;
+  }
+}
+
+/* ── Model loader / errors (inside the PiP stage) ─────────────────────── */
 
 .model-loader {
   position: absolute;
   inset: 0;
-  background: #0b0d10;
+  background: rgba(5, 7, 10, 0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 20px;
+  gap: 10px;
+  padding: 12px;
   z-index: 100;
 }
 
 .model-loader-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: #e6e8eb;
+  text-align: center;
 }
 
 .model-loader-title.error {
@@ -262,16 +243,15 @@ h1 {
 
 .model-loader-phase {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   color: #8a93a0;
   min-height: 1.2em;
   text-align: center;
 }
 
 .progress-bar {
-  width: 70%;
-  max-width: 360px;
-  height: 8px;
+  width: 80%;
+  height: 6px;
   background: #1a1f26;
   border-radius: 999px;
   overflow: hidden;
@@ -279,110 +259,100 @@ h1 {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  background: linear-gradient(90deg, #38bdf8, #a78bfa);
   border-radius: 999px;
   transition: width 0.15s ease-out;
 }
 
 .progress-text {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: #93c5fd;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px;
 }
 
-.lesson-overlay-ui {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  flex-direction: row;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(11, 13, 16, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* ── Explainer drawer + toggle ────────────────────────────────────────── */
+
+.explainer-toggle {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  z-index: 50;
+  padding: 10px 18px;
   border-radius: 999px;
-  pointer-events: auto;
-  z-index: 10;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-.toggle-pill {
-  padding: 5px 14px;
-  background: transparent;
-  color: #a3b3c4;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  line-height: 1.2;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    border-color 0.15s;
+.explainer-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(420px, 92vw);
+  background: rgba(13, 17, 24, 0.95);
+  border-left: 1px solid #2a3038;
+  padding: 60px 18px 18px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 240ms ease;
+  z-index: 40;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #c0c6cc;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.toggle-pill:hover {
+.explainer-drawer[data-open="true"] {
+  transform: translateX(0);
+}
+
+.explainer-drawer h2 {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
   color: #e6e8eb;
 }
 
-.toggle-pill[aria-pressed="true"] {
-  background: rgba(37, 99, 235, 0.5);
-  color: #fff;
-  border-color: rgba(96, 165, 250, 0.55);
+.explainer-drawer h3 {
+  font-size: 0.92rem;
+  margin: 18px 0 6px;
+  color: #93c5fd;
+  font-weight: 600;
 }
 
-@media (max-width: 600px) {
-  .lesson-overlay-ui {
-    top: 6px;
-    right: 6px;
-    gap: 2px;
-    padding: 3px;
-  }
-
-  .toggle-pill {
-    padding: 3px 10px;
-    font-size: 0.72rem;
-  }
+.explainer-drawer p {
+  margin: 0 0 8px;
 }
 
-.lesson-nav {
-  display: flex;
-  gap: 8px;
-  margin: 12px 0 8px;
-  flex-wrap: wrap;
+.explainer-drawer ul,
+.explainer-drawer ol {
+  margin: 4px 0 8px;
+  padding-left: 22px;
 }
 
-.lesson-tab {
+.explainer-drawer li {
+  margin: 4px 0;
+}
+
+.explainer-drawer code {
   background: #1a1f26;
-  color: #e6e8eb;
-  border: 1px solid #2a3038;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  color: #fbbf24;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
-.lesson-tab.active {
-  background: #2563eb;
-  border-color: #2563eb;
+.explainer-drawer strong {
+  color: #e6e8eb;
 }
 
 .lesson-description {
   color: #8a93a0;
   margin: 0 0 12px;
   font-size: 0.9rem;
-}
-
-.status {
-  margin-top: 12px;
-  font-size: 0.9rem;
-  color: #8a93a0;
-  min-height: 1.4em;
 }
 
 .error {
