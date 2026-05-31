@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { landmarkBus } from "./landmarkBus";
 
@@ -30,6 +31,15 @@ import { landmarkBus } from "./landmarkBus";
 //           is ejected from the fusion point.
 //   lock  — the gold helix holds with a tight rim glow while an energy label
 //           (+17.6 MeV) shows, then everything returns to the hands.
+//
+// Throughout the whole reward window (flash + lock, LOCK_DURATION seconds) the
+// camera tilts up to ~45° and does one organic eased pan between two azimuth
+// presets (A → B) around world origin (the fused nucleus), so the otherwise-
+// static gold helix is shown as a slow camera move instead of one frozen angle.
+// The initial cut from the default view to preset A lands on the flash, which
+// masks it. When the window ends the camera eases back (azimuth → 0, tilt →
+// default 35°) over CAM_RETURN_DURATION, so handing control back to the hands
+// is a smooth move, not a snap.
 
 const R_MAJOR = 5;
 const R_MINOR = 1.6;
@@ -55,6 +65,29 @@ const SMOOTH_K = 6.0;
 // screen +Y with weight sin(TILT); world +Y projects with weight cos(TILT).
 const TILT = (35 * Math.PI) / 180;
 const CAM_DIST = 30;
+// Reward-window camera move: tilt up to PAN_TILT and pan azimuth from preset A
+// to preset B (a single eased A→B), then ease back to the default (azimuth 0,
+// TILT) over CAM_RETURN_DURATION when the window ends. Azimuths are around
+// world +Z; ±38° gives a ~76° arc across the front of the fused nucleus.
+const PAN_TILT = (45 * Math.PI) / 180;
+const PRESET_A_AZ = (-38 * Math.PI) / 180;
+const PRESET_B_AZ = (38 * Math.PI) / 180;
+const CAM_RETURN_DURATION = 1.0;
+// Reward-window zoom-in: shrink the effective FOV so the fused ⁴He fills the
+// canvas. OrthographicCamera has no perspective FOV — zoom is the lever
+// (effective frustum height = FRUSTUM_HEIGHT / zoom). PAN_ZOOM ≈ 1.6 makes the
+// ~14.3-diameter helix nearly fill the 18-unit frustum; eased in over
+// ZOOM_IN_DURATION then held, eased back to 1 on return.
+const PAN_ZOOM = 1.15;
+const ZOOM_IN_DURATION = 1.2;
+// On fusion the merged ⁴He grows to this radius scale (the helices' locked
+// radius target), so it reads as a big nucleus filling the frame.
+const FUSION_RADIUS_SCALE = 2;
+// Reward-window depth of field (BokehPass). aperture is the BokehShader
+// coefficient (not an f-number); these read as a ~f/2.8 shallow DOF that keeps
+// the front of the nucleus sharp and blurs everything else. Tunable by eye.
+const BOKEH_APERTURE = 0.0012;
+const BOKEH_MAXBLUR = 0.02;
 // Frustum sized to give each hand room to wander across the screen without
 // the helix clipping off the far edge.
 const FRUSTUM_HEIGHT = 18;
@@ -121,8 +154,8 @@ const LOCK_DURATION = 10.0;
 // burst during the 2s flash; BLOOM_STRENGTH_RIM is the much-lower hold during
 // the remaining lock, giving a tight rim glow on the gold helix instead of a
 // wide halo. The drop happens over RIM_RAMP_DURATION at the flash → lock edge.
-const BLOOM_STRENGTH_MAX = 1.8;
-const BLOOM_STRENGTH_RIM = 0.3;
+const BLOOM_STRENGTH_MAX = 0.9;
+const BLOOM_STRENGTH_RIM = 0.15;
 const RIM_RAMP_DURATION = 0.5;
 const BLOOM_RADIUS = 0.8;
 const BLOOM_THRESHOLD = 0.6;
@@ -249,6 +282,37 @@ export default function ParticleStage() {
     moodLight.target.position.copy(backdrop.position);
     scene.add(moodLight);
     scene.add(moodLight.target);
+
+    // Place the camera on a sphere of radius CAM_DIST about world origin, by
+    // azimuth ψ (around world +Z, the torus disk's axis) and tilt τ (elevation):
+    // horizontal radius CAM_DIST·sin(τ), height CAM_DIST·cos(τ). ψ=0, τ=TILT
+    // reproduces the default view exactly, so easing back there is snap-free.
+    // setCameraPose also re-parks the dark backdrop + mood light behind the
+    // scene relative to the new view so the wash stays put as the camera moves.
+    const camForwardPose = new THREE.Vector3();
+    const setCameraPose = (azimuth: number, tilt: number, zoom: number) => {
+      const hRadius = CAM_DIST * Math.sin(tilt);
+      camera.position.set(
+        hRadius * Math.sin(azimuth),
+        -hRadius * Math.cos(azimuth),
+        CAM_DIST * Math.cos(tilt),
+      );
+      camera.up.set(0, 0, 1);
+      camera.lookAt(0, 0, 0);
+      camera.updateMatrixWorld();
+      // zoom shrinks the effective ortho frustum (FRUSTUM_HEIGHT / zoom) so the
+      // fused helix fills the canvas. applyResize leaves camera.zoom alone, so
+      // it persists across resizes and composes with the frustum bounds.
+      camera.zoom = zoom;
+      camera.updateProjectionMatrix();
+
+      camForwardPose.copy(camera.position).multiplyScalar(-1).normalize();
+      backdrop.position.copy(camForwardPose).multiplyScalar(28);
+      backdrop.lookAt(camera.position);
+      moodLight.position.copy(camForwardPose).multiplyScalar(-8);
+      moodLight.target.position.copy(backdrop.position);
+      moodLight.target.updateMatrixWorld();
+    };
 
     const cubeGeom = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
 
@@ -391,13 +455,29 @@ export default function ParticleStage() {
     seedMatrices(deuterium);
     seedMatrices(tritium);
 
-    // Post-processing: RenderPass → UnrealBloomPass → OutputPass. Bloom starts
-    // disabled (and stays disabled outside the reward window to skip its
-    // bright-pixel extraction). OutputPass maps emissive HDR cleanly to LDR.
+    // Post-processing: RenderPass → BokehPass → UnrealBloomPass → OutputPass.
+    // Bokeh (depth of field) and bloom both start disabled and are enabled only
+    // during the reward window — bokeh re-renders the scene depth, so it stays
+    // off outside it. OutputPass maps emissive HDR cleanly to LDR.
     const composer = new EffectComposer(renderer);
     composer.setPixelRatio(pixelRatio);
     composer.setSize(viewW, viewH);
     composer.addPass(new RenderPass(scene, camera));
+    // Depth of field focusing the front of the fused nucleus. The BokehShader's
+    // default is a perspective camera; flip the define so it linearizes depth
+    // for our OrthographicCamera (orthographicDepthToViewZ) and focuses by real
+    // distance. focus is updated per-frame to track the growing nucleus front.
+    const bokehPass = new BokehPass(scene, camera, {
+      focus: CAM_DIST - HELIX_OUTER,
+      aperture: BOKEH_APERTURE,
+      maxblur: BOKEH_MAXBLUR,
+    });
+    bokehPass.materialBokeh.defines.PERSPECTIVE_CAMERA = 0;
+    bokehPass.materialBokeh.needsUpdate = true;
+    bokehPass.enabled = false;
+    // BokehPass.uniforms is typed as `object`; grab the focus uniform typed.
+    const bokehFocus = bokehPass.materialBokeh.uniforms.focus as { value: number };
+    composer.addPass(bokehPass);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(viewW, viewH),
       0,
@@ -419,6 +499,7 @@ export default function ParticleStage() {
       renderer.setSize(w, h);
       composer.setSize(w, h);
       bloomPass.setSize(w, h);
+      bokehPass.setSize(w, h);
       const aspect = w / h;
       camera.left = (-FRUSTUM_HEIGHT * aspect) / 2;
       camera.right = (FRUSTUM_HEIGHT * aspect) / 2;
@@ -442,6 +523,13 @@ export default function ParticleStage() {
 
     let stage: Stage = "idle";
     let stageTime = 0;
+    // Camera-move bookkeeping. rewardTime drives the A→B pan over the reward
+    // window; camPanning latches so the pan→return edge fires once; camReturning
+    // + camReturnTime drive the eased return to the default view afterward.
+    let rewardTime = 0;
+    let camPanning = false;
+    let camReturning = false;
+    let camReturnTime = 0;
     const tmpColor = new THREE.Color();
     const colorCharging = new THREE.Color(MOOD_COLOR);
     const colorGold = new THREE.Color(GOLD_COLOR);
@@ -591,16 +679,17 @@ export default function ParticleStage() {
       const rightTargetY = rightWorld ? rightWorld.y : tritium.homeY;
       const rightTargetScale = frame?.rightPalm ? pinchToScale(frame.rightPinchCm) : 1;
 
-      // During flash + lock, both helices are pinned to world origin with unit
-      // radius (the fused ⁴He); hand input is ignored. Smoothing pulls them
-      // toward (0,0) without a snap, and back to the hands at lock-end.
+      // During flash + lock, both helices are pinned to world origin and grow to
+      // FUSION_RADIUS_SCALE (the big fused ⁴He); hand input is ignored. Smoothing
+      // pulls them toward (0,0) and up to 2× without a snap, and back to the
+      // hands / hand-driven radius at lock-end.
       const locked = stage === "flash" || stage === "lock";
       const tDX = locked ? 0 : leftTargetX;
       const tDY = locked ? 0 : leftTargetY;
-      const tDS = locked ? 1 : leftTargetScale;
+      const tDS = locked ? FUSION_RADIUS_SCALE : leftTargetScale;
       const tTX = locked ? 0 : rightTargetX;
       const tTY = locked ? 0 : rightTargetY;
-      const tTS = locked ? 1 : rightTargetScale;
+      const tTS = locked ? FUSION_RADIUS_SCALE : rightTargetScale;
 
       const smoothAlpha = 1 - Math.exp(-SMOOTH_K * dt);
       deuterium.centerX += (tDX - deuterium.centerX) * smoothAlpha;
@@ -667,6 +756,48 @@ export default function ParticleStage() {
         }
       }
 
+      // Camera move through the reward window. While flash/lock, tilt to
+      // PAN_TILT and pan azimuth A→B; rewardTime maps [0, LOCK_DURATION] → [0,1]
+      // eased by smootherstep (ease in/out). When the window ends, ease back to
+      // the default view (azimuth 0, TILT) over CAM_RETURN_DURATION. idle with
+      // no return in flight leaves the camera untouched (zero per-frame cost).
+      const panning = stage === "flash" || stage === "lock";
+      if (panning) {
+        rewardTime += dt;
+        const t = Math.min(1, rewardTime / LOCK_DURATION);
+        const e = t * t * t * (t * (t * 6 - 15) + 10);
+        // Zoom eases in on its own (shorter) timeline, then holds at PAN_ZOOM so
+        // the fused helix fills the canvas for most of the window.
+        const zt = Math.min(1, rewardTime / ZOOM_IN_DURATION);
+        const ze = zt * zt * zt * (zt * (zt * 6 - 15) + 10);
+        setCameraPose(
+          PRESET_A_AZ + (PRESET_B_AZ - PRESET_A_AZ) * e,
+          PAN_TILT,
+          1 + (PAN_ZOOM - 1) * ze,
+        );
+        camPanning = true;
+        camReturning = false; // a fresh reaction cancels any in-flight return
+      } else {
+        if (camPanning) {
+          // Window just ended — start the eased return from preset B / PAN_TILT.
+          camReturning = true;
+          camReturnTime = 0;
+          camPanning = false;
+          rewardTime = 0;
+        }
+        if (camReturning) {
+          camReturnTime += dt;
+          const t = Math.min(1, camReturnTime / CAM_RETURN_DURATION);
+          const e = t * t * t * (t * (t * 6 - 15) + 10);
+          setCameraPose(
+            PRESET_B_AZ + (0 - PRESET_B_AZ) * e,
+            PAN_TILT + (TILT - PAN_TILT) * e,
+            PAN_ZOOM + (1 - PAN_ZOOM) * e,
+          );
+          if (t >= 1) camReturning = false;
+        }
+      }
+
       // Neutron flight + fade.
       if (neutronAge <= NEUTRON_LIFE) {
         neutronAge += dt;
@@ -722,6 +853,15 @@ export default function ParticleStage() {
       bloomPass.enabled = bloomStrength > 0;
       bloomPass.strength = bloomStrength;
 
+      // Depth of field only during the reward window. Focus the front edge of
+      // the fused nucleus so it stays sharp as it grows to FUSION_RADIUS_SCALE;
+      // the camera is always CAM_DIST from origin looking at it, so the front is
+      // HELIX_OUTER·radiusScale nearer than the center.
+      bokehPass.enabled = locked;
+      if (locked) {
+        bokehFocus.value = CAM_DIST - HELIX_OUTER * deuterium.radiusScale;
+      }
+
       tmpColor.copy(deuteriumOriginalColor).lerp(colorGold, colorMix);
       deuterium.material.color.copy(tmpColor);
       deuterium.material.emissive.copy(colorGold).multiplyScalar(colorMix);
@@ -770,6 +910,7 @@ export default function ParticleStage() {
       backdropGeom.dispose();
       backdropMat.dispose();
       bloomPass.dispose();
+      bokehPass.dispose();
       composer.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode) {
