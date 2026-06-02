@@ -4,6 +4,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { landmarkBus } from "./landmarkBus";
 
 // Deuterium–tritium fusion, driven by two hands, drawn as two DNA-style
@@ -217,11 +218,18 @@ type Helix = {
 
 type Stage = "idle" | "charging" | "flash" | "lock";
 
-export default function ParticleStage() {
+export default function ParticleStage({ interactive }: { interactive: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chargeFillRef = useRef<HTMLDivElement>(null);
   const chargeTrackRef = useRef<HTMLDivElement>(null);
   const burstLabelRef = useRef<HTMLDivElement>(null);
+
+  // Mirror the prop into a ref so the persistent rAF loop (built once in the
+  // mount effect below) can read the latest value without rebuilding the scene.
+  const interactiveRef = useRef(interactive);
+  useEffect(() => {
+    interactiveRef.current = interactive;
+  }, [interactive]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -301,6 +309,18 @@ export default function ParticleStage() {
     // setCameraPose also re-parks the dark backdrop + mood light behind the
     // scene relative to the new view so the wash stays put as the camera moves.
     const camForwardPose = new THREE.Vector3();
+    // Re-park the dark backdrop + mood light behind the scene relative to the
+    // current camera position so the wash stays put as the camera moves —
+    // whether moved by setCameraPose (scripted reward) or OrbitControls (the
+    // user-draggable intro view).
+    const parkBackdrop = () => {
+      camForwardPose.copy(camera.position).multiplyScalar(-1).normalize();
+      backdrop.position.copy(camForwardPose).multiplyScalar(28);
+      backdrop.lookAt(camera.position);
+      moodLight.position.copy(camForwardPose).multiplyScalar(-8);
+      moodLight.target.position.copy(backdrop.position);
+      moodLight.target.updateMatrixWorld();
+    };
     const setCameraPose = (azimuth: number, tilt: number, zoom: number) => {
       const hRadius = CAM_DIST * Math.sin(tilt);
       camera.position.set(
@@ -316,14 +336,28 @@ export default function ParticleStage() {
       // it persists across resizes and composes with the frustum bounds.
       camera.zoom = zoom;
       camera.updateProjectionMatrix();
-
-      camForwardPose.copy(camera.position).multiplyScalar(-1).normalize();
-      backdrop.position.copy(camForwardPose).multiplyScalar(28);
-      backdrop.lookAt(camera.position);
-      moodLight.position.copy(camForwardPose).multiplyScalar(-8);
-      moodLight.target.position.copy(backdrop.position);
-      moodLight.target.updateMatrixWorld();
+      parkBackdrop();
     };
+
+    // User-draggable camera for the intro page: orbit (rotate) + zoom around the
+    // scene center, no pan so (0,0,0) stays framed. Disabled while the demo is
+    // active — there the scripted reward camera (setCameraPose) owns the view.
+    // Skipped entirely on touch/mobile: OrbitControls sets touch-action:none on
+    // the canvas, which would trap vertical page scroll over the (tall) scene.
+    // Mobile gets a static showcase scene so the page scrolls normally.
+    const controls = isMobile
+      ? null
+      : new OrbitControls(camera, renderer.domElement);
+    if (controls) {
+      controls.target.set(0, 0, 0);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+      controls.minZoom = 0.6;
+      controls.maxZoom = 3;
+      controls.enabled = interactiveRef.current;
+    }
 
     const cubeGeom = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
 
@@ -825,11 +859,31 @@ export default function ParticleStage() {
       return RADIUS_MIN + (c / PINCH_FULL_CM) * (RADIUS_MAX - RADIUS_MIN);
     };
 
+    let wasInteractive = controls !== null && interactiveRef.current;
     const loop = () => {
       const now = performance.now();
       const dt = Math.min(1 / 30, Math.max(1 / 120, (now - prevT) / 1000));
       prevT = now;
       const tNoise = (now - startT) / 1000;
+
+      // Toggle between the user-draggable intro camera (OrbitControls) and the
+      // scripted demo camera on view change. On every transition snap back to
+      // the default framed pose so the demo always starts centered and the
+      // intro re-enters from a known orbit.
+      const interactive = interactiveRef.current && controls !== null;
+      if (controls && interactive !== wasInteractive) {
+        controls.enabled = interactive;
+        setCameraPose(0, TILT, 1);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        // A view switch mid-reward must not leave the scripted-camera latches
+        // set, or re-entering the demo replays a stale tilt. Reset on toggle.
+        camPanning = false;
+        camReturning = false;
+        rewardTime = 0;
+        camReturnTime = 0;
+        wasInteractive = interactive;
+      }
 
       const frame = landmarkBus.latest;
       const leftWorld = palmToWorld(frame?.leftPalm ?? null);
@@ -924,31 +978,38 @@ export default function ParticleStage() {
       // eased by smootherstep (ease in/out). When the window ends, ease back to
       // the default view (azimuth 0, TILT) over CAM_RETURN_DURATION. idle with
       // no return in flight leaves the camera untouched (zero per-frame cost).
-      const panning = stage === "flash" || stage === "lock";
-      if (panning) {
-        rewardTime += dt;
-        const t = Math.min(1, rewardTime / LOCK_DURATION);
-        const e = t * t * t * (t * (t * 6 - 15) + 10);
-        // Calm reward: no azimuth pan, no zoom (the ⁴He model sits to the right
-        // and must stay framed + sharp) — just a gentle eased tilt-up for life.
-        setCameraPose(0, TILT + (PAN_TILT - TILT) * e, 1);
-        camPanning = true;
-        camReturning = false; // a fresh reaction cancels any in-flight return
+      if (interactive && controls) {
+        // Intro page: the user owns the camera via OrbitControls. Advance the
+        // damping and keep the backdrop parked behind the freely-orbited view.
+        controls.update();
+        parkBackdrop();
       } else {
-        if (camPanning) {
-          // Window just ended — start the eased return from preset B / PAN_TILT.
-          camReturning = true;
-          camReturnTime = 0;
-          camPanning = false;
-          rewardTime = 0;
-        }
-        if (camReturning) {
-          camReturnTime += dt;
-          const t = Math.min(1, camReturnTime / CAM_RETURN_DURATION);
+        const panning = stage === "flash" || stage === "lock";
+        if (panning) {
+          rewardTime += dt;
+          const t = Math.min(1, rewardTime / LOCK_DURATION);
           const e = t * t * t * (t * (t * 6 - 15) + 10);
-          // Ease the gentle tilt back down to the default view.
-          setCameraPose(0, PAN_TILT + (TILT - PAN_TILT) * e, 1);
-          if (t >= 1) camReturning = false;
+          // Calm reward: no azimuth pan, no zoom (the ⁴He model sits to the
+          // right and must stay framed + sharp) — just a gentle eased tilt-up.
+          setCameraPose(0, TILT + (PAN_TILT - TILT) * e, 1);
+          camPanning = true;
+          camReturning = false; // a fresh reaction cancels any in-flight return
+        } else {
+          if (camPanning) {
+            // Window just ended — ease the return from preset B / PAN_TILT.
+            camReturning = true;
+            camReturnTime = 0;
+            camPanning = false;
+            rewardTime = 0;
+          }
+          if (camReturning) {
+            camReturnTime += dt;
+            const t = Math.min(1, camReturnTime / CAM_RETURN_DURATION);
+            const e = t * t * t * (t * (t * 6 - 15) + 10);
+            // Ease the gentle tilt back down to the default view.
+            setCameraPose(0, PAN_TILT + (TILT - PAN_TILT) * e, 1);
+            if (t >= 1) camReturning = false;
+          }
         }
       }
 
@@ -1070,6 +1131,7 @@ export default function ParticleStage() {
 
     return () => {
       cancelAnimationFrame(raf);
+      controls?.dispose();
       resizeObserver.disconnect();
       deuterium.mesh.dispose();
       tritium.mesh.dispose();

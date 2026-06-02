@@ -243,16 +243,16 @@ body {
   margin-top: auto; /* pin to the bottom of the scrolling sidebar */
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
+  justify-content: center; /* keep the → trailing the label, not flung to the far edge of the wide pill */
+  gap: var(--s2);
   background: var(--hot);
   color: var(--on-hot);
   border: 0;
   border-radius: var(--radius-pill);
   padding: var(--s3) var(--s4);
   font: 700 1rem / 1.2 var(--font-display);
+  letter-spacing: 0.02em; /* a little breathing room for the CJK label */
   cursor: pointer;
-  text-align: left;
 }
 
 .cta::after {
@@ -435,11 +435,34 @@ body {
     border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   }
   .stage-panel {
-    height: 70vh;
+    /* Shorter than the desktop full-height so the title + copy sit close under
+     * the scene instead of a full screen below it. */
+    height: 52vh;
+    min-height: 300px;
     padding: var(--s3);
     order: -1; /* canvas first on mobile */
   }
+  /* Let a vertical swipe scroll the page even when it starts on the scene.
+   * (On touch, OrbitControls is skipped, so nothing sets touch-action:none.) */
+  .stage-panel,
+  .particle-stage,
+  .particle-stage canvas {
+    touch-action: pan-y;
+  }
   .cta {
-    margin-top: var(--s2);
+    margin-top: var(--s4);
+    /* Bigger tap target on touch. */
+    padding: var(--s4) var(--s4);
+  }
+}
+
+/* Phones: trim the scene a touch more and keep the equation chip on one line. */
+@media (max-width: 480px) {
+  .stage-panel {
+    height: 46vh;
+  }
+  .explainer p > code:only-child {
+    font-size: 0.82rem;
+    padding: var(--s3) var(--s2);
   }
 }

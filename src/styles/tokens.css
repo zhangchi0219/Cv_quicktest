@@ -8,24 +8,27 @@
    ============================================================ */
 
 :root {
-  /* — Canvas & ink —————————————————————————————— */
-  --canvas:     #E7E2D4;   /* warm sand (default). Alt cream: #F3F0E9 */
-  --surface:    #EFEBDF;   /* slightly lighter, for raised panels */
-  --ink:        #0A0A0A;   /* near-black text */
-  --ink-muted:  #6B6862;   /* warm gray, for secondary text + labels */
+  /* — Canvas & ink ——————————————————————————————
+     Warm, low-saturation ground: a soft oat surface so the muted
+     terracotta accent reads without shouting. Alt cream: #F3EEE4 */
+  --canvas:     #EBE4D6;   /* warm oat (default) */
+  --surface:    #F3EEE4;   /* slightly lighter, for raised panels */
+  --ink:        #2A241E;   /* warm espresso-black text */
+  --ink-muted:  #8A7E6D;   /* warm taupe, for secondary text + labels */
 
   /* — One hot accent. Use it ONCE per screen (a CTA, or one block). — */
-  --hot:        #E63E27;   /* orange-red */
-  --on-hot:     #F3F0E9;   /* light text that sits on the hot fill */
+  --hot:        #BE6A4A;   /* muted terracotta */
+  --on-hot:     #F6F0E6;   /* warm off-white text that sits on the hot fill */
 
   /* — Module accent palette: color-code each course module / card. —
-     Text on the muted blocks (sage/clay/salmon/slate) = var(--ink).
+     Warm, low-saturation blocks that harmonize with the terracotta accent.
+     Text on the muted blocks (sand/clay/rose/olive) = var(--ink).
      Text on the hot block = var(--on-hot). */
-  --m-sage:     #A6B3A0;
-  --m-clay:     #BBA98A;
-  --m-salmon:   #EFD3C8;
-  --m-slate:    #A0A6EC;
-  --m-hot:      #E63E27;
+  --m-sand:     #D9C9AB;   /* warm sand */
+  --m-clay:     #C8A98B;   /* dusty clay/tan */
+  --m-rose:     #D4B3A4;   /* muted dusty rose */
+  --m-olive:    #B4AC82;   /* warm muted olive */
+  --m-hot:      #BE6A4A;
 
   /* — Type families ————————————————————————————————
      Latin display/mono fonts do NOT cover Chinese glyphs, so every

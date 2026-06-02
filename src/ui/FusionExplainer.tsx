@@ -1,14 +1,24 @@
-// Right-pane teaching copy for the deuterium–tritium fusion scene. Replaces
-// the old CV-principle explainer. zh-CN per project convention.
-export function FusionExplainer() {
+// Left-pane teaching copy for the deuterium–tritium fusion scene. Split into two
+// parts: FusionPrinciple (核聚变原理 + 意义 + 方程/质量亏损/库仑势垒 — shown on the
+// intro page) and FusionInteraction (这是什么 + 手势映射 + 玩法 — shown on the demo
+// page). zh-CN per project convention.
+export function FusionPrinciple() {
   return (
     <>
-      <h3>这是什么</h3>
+      <h3>核聚变原理</h3>
       <p>
-        两只手分别是两个<strong>原子核</strong>：左手是<strong>氘核</strong>
-        （²H，1 个质子 + 1 个中子），右手是<strong>氚核</strong>
-        （³H，1 个质子 + 2 个中子）。把两团核云慢慢靠到一起、顶住排斥力别松手，
-        蓄满后就会<strong>聚变</strong>。
+        把两个<strong>轻原子核</strong>推到足够近，它们会<strong>融合</strong>
+        成一个更重的核，并释放出巨大的能量 —— 这就是<strong>核聚变</strong>，
+        与重核分裂的「裂变」正好相反。<strong>太阳和恒星</strong>的核心，
+        就在极高的温度与压力下持续聚变，是宇宙中绝大多数光和热的来源。
+      </p>
+
+      <h3>核聚变的意义</h3>
+      <p>
+        聚变难在「点火」，可一旦驾驭，回报极具吸引力：反应<strong>本质安全</strong> ——
+        条件稍有不足反应就立刻停下，不会像裂变那样失控熔毁；它也
+        <strong>几乎不留长寿命的高放射性废料</strong>。如果能稳定地驾驭它，
+        就意味着<strong>把恒星的能量带到地球</strong>，成为人类近乎终极的清洁能源。
       </p>
 
       <h3>聚变方程</h3>
@@ -35,6 +45,20 @@ export function FusionExplainer() {
         短程的<strong>强核力</strong>才会接管并把它们「粘」在一起。
         画面顶部的蓄能条就代表你正在克服这道库仑势垒 —— 它对应现实中聚变需要的
         极高温度与压力。
+      </p>
+    </>
+  );
+}
+
+export function FusionInteraction() {
+  return (
+    <>
+      <h3>这是什么</h3>
+      <p>
+        两只手分别是两个<strong>原子核</strong>：左手是<strong>氘核</strong>
+        （²H，1 个质子 + 1 个中子），右手是<strong>氚核</strong>
+        （³H，1 个质子 + 2 个中子）。把两团核云慢慢靠到一起、顶住排斥力别松手，
+        蓄满后就会<strong>聚变</strong>。
       </p>
 
       <h3>手势怎么映射</h3>

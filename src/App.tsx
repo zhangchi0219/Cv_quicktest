@@ -12,7 +12,7 @@ import { useCamera } from "./camera/useCamera";
 import { useVideoDevices } from "./camera/useVideoDevices";
 import type { Detectors } from "./cv/mediapipe";
 import { useHandTracking } from "./cv/useHandTracking";
-import { FusionExplainer } from "./ui/FusionExplainer";
+import { FusionPrinciple, FusionInteraction } from "./ui/FusionExplainer";
 
 // The fusion scene fills the right-hand stage panel. Lazy so the three.js chunk
 // only downloads after the rest of the UI has painted; if it never loads, the
@@ -142,10 +142,8 @@ export default function App() {
               </div>
             </header>
 
-            <p className="lead">双手即两个原子核</p>
-
             <div className="explainer">
-              <FusionExplainer />
+              <FusionPrinciple />
             </div>
 
             <button type="button" className="cta" onClick={enterDemo}>
@@ -157,6 +155,13 @@ export default function App() {
             <button type="button" className="back-link" onClick={exitDemo}>
               ← 返回说明
             </button>
+
+            <header className="brand">
+              <div className="brand-text">
+                <span className="label">交互原理 · HOW IT WORKS</span>
+                <p className="lead">双手即两个原子核</p>
+              </div>
+            </header>
 
             <div className="camera-control">
               <span className="label">摄像头 · CAMERA</span>
@@ -209,9 +214,9 @@ export default function App() {
               </span>
             </div>
 
-            <p className="demo-hint">
-              张开双手，两团核云会跟随你的左右手；慢慢靠拢双核并稳住，蓄满顶部「库仑势垒」即可触发聚变。
-            </p>
+            <div className="explainer">
+              <FusionInteraction />
+            </div>
           </div>
         )}
       </aside>
@@ -221,7 +226,7 @@ export default function App() {
           fallback={<div className="particle-stage" aria-hidden="true" />}
         >
           <SceneErrorBoundary>
-            <ParticleStage />
+            <ParticleStage interactive={view === "intro"} />
           </SceneErrorBoundary>
         </Suspense>
       </main>
