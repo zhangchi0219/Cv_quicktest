@@ -3,7 +3,6 @@ import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { landmarkBus } from "./landmarkBus";
 
@@ -32,14 +31,13 @@ import { landmarkBus } from "./landmarkBus";
 //   lock  — the gold helix holds with a tight rim glow while an energy label
 //           (+17.6 MeV) shows, then everything returns to the hands.
 //
-// Throughout the whole reward window (flash + lock, LOCK_DURATION seconds) the
-// camera tilts up to ~45° and does one organic eased pan between two azimuth
-// presets (A → B) around world origin (the fused nucleus), so the otherwise-
-// static gold helix is shown as a slow camera move instead of one frozen angle.
-// The initial cut from the default view to preset A lands on the flash, which
-// masks it. When the window ends the camera eases back (azimuth → 0, tilt →
-// default 35°) over CAM_RETURN_DURATION, so handing control back to the hands
-// is a smooth move, not a snap.
+// A "textbook" layer is drawn alongside the helices: a small labeled Bohr atom
+// model floats above each helix (氘 ²H = 1 proton + 1 neutron, 氚 ³H = 1p + 2n,
+// each with an orbiting electron), and on fusion a ⁴He model (2p + 2n, 2
+// electrons) fades in to the RIGHT of the merged nucleus. The reward is kept
+// calm so both stay framed and sharp: the gold nucleus settles to a moderate
+// size and the camera only eases a gentle tilt (no zoom, no orbit pan), easing
+// back to the default over CAM_RETURN_DURATION when the window ends.
 
 const R_MAJOR = 5;
 const R_MINOR = 1.6;
@@ -65,32 +63,29 @@ const SMOOTH_K = 6.0;
 // screen +Y with weight sin(TILT); world +Y projects with weight cos(TILT).
 const TILT = (35 * Math.PI) / 180;
 const CAM_DIST = 30;
-// Reward-window camera move: tilt up to PAN_TILT and pan azimuth from preset A
-// to preset B (a single eased A→B), then ease back to the default (azimuth 0,
-// TILT) over CAM_RETURN_DURATION when the window ends. Azimuths are around
-// world +Z; ±38° gives a ~76° arc across the front of the fused nucleus.
-const PAN_TILT = (45 * Math.PI) / 180;
-const PRESET_A_AZ = (-38 * Math.PI) / 180;
-const PRESET_B_AZ = (38 * Math.PI) / 180;
+// Reward-window camera move, kept calm so the fused nucleus and the ⁴He model
+// to its right both stay framed: no orbit pan, no zoom — just a gentle eased
+// tilt from TILT up to PAN_TILT, eased back over CAM_RETURN_DURATION at the end.
+const PAN_TILT = (40 * Math.PI) / 180;
 const CAM_RETURN_DURATION = 1.0;
-// Reward-window zoom-in: shrink the effective FOV so the fused ⁴He fills the
-// canvas. OrthographicCamera has no perspective FOV — zoom is the lever
-// (effective frustum height = FRUSTUM_HEIGHT / zoom). PAN_ZOOM ≈ 1.6 makes the
-// ~14.3-diameter helix nearly fill the 18-unit frustum; eased in over
-// ZOOM_IN_DURATION then held, eased back to 1 on return.
-const PAN_ZOOM = 1.15;
-const ZOOM_IN_DURATION = 1.2;
-// On fusion the merged ⁴He grows to this radius scale (the helices' locked
-// radius target), so it reads as a big nucleus filling the frame.
-const FUSION_RADIUS_SCALE = 2;
-// Reward-window depth of field (BokehPass). aperture is the BokehShader
-// coefficient (not an f-number); these read as a ~f/2.8 shallow DOF that keeps
-// the front of the nucleus sharp and blurs everything else. Tunable by eye.
-const BOKEH_APERTURE = 0.0012;
-const BOKEH_MAXBLUR = 0.02;
-// Frustum sized to give each hand room to wander across the screen without
-// the helix clipping off the far edge.
-const FRUSTUM_HEIGHT = 18;
+// On fusion the merged ⁴He settles to this radius scale at world origin —
+// moderate (not frame-filling) so the ⁴He atomic model fits to its right.
+const FUSION_RADIUS_SCALE = 1.2;
+// Camera framing is a "contain-fit": the view always shows at least
+// [±FIT_HALF_W, ±FIT_HALF_H] world units, expanding the shorter axis to fill the
+// canvas. The stage panel is roughly square-to-portrait (not the old full-window
+// 16:9), so fitting WIDTH first keeps the two idle helices (parked at
+// ±HOME_OFFSET, dense radius ~7) fully on-screen instead of clipping off the
+// left/right edges; portrait panels just show more empty space above/below.
+// FIT_HALF_W = HOME_OFFSET + dense radius + margin.
+const FIT_HALF_W = 16;
+const FIT_HALF_H = 8;
+
+// Ortho half-bounds for a given canvas aspect, applying the contain-fit above.
+function computeFrustum(aspect: number): { halfW: number; halfH: number } {
+  const halfH = Math.max(FIT_HALF_H, FIT_HALF_W / aspect);
+  return { halfW: halfH * aspect, halfH };
+}
 // Lifetime / fade. At steady state count/LIFETIME particles respawn per second
 // per helix. Respawn rewrites pre-allocated typed arrays in place — no
 // allocation, no GC churn.
@@ -171,6 +166,22 @@ const NEUTRON_LIFE = 1.8;
 const NEUTRON_FADE = 0.5;
 const NEUTRON_SIZE = 0.55;
 
+// ── Bohr atomic models (the "textbook" layer over the helices) ────────────
+// Nucleus = red protons + slate neutrons in a tight cluster; cyan electrons
+// orbit on faint tilted rings. Slight emissive so the colors read as a diagram
+// regardless of the dramatic scene lighting.
+const PROTON_COLOR = 0xef4444; // red
+const NEUTRON_COLOR = 0x94a3b8; // slate
+const ELECTRON_COLOR = 0x7dd3fc; // cyan-white
+const NUCLEON_R = 0.42;
+const ELECTRON_R = 0.18;
+const ORBIT_R = 2.2; // electron orbit radius (world units)
+const ELECTRON_SPEED = 1.6; // base orbital rate (rad/s)
+const MODEL_Y = 10; // model height above its helix center (clears the helix)
+const LABEL_Y = 3.3; // label height above the model nucleus
+const HE_MODEL_X = 12; // ⁴He model x, to the right of the origin nucleus
+const MODEL_FADE_K = 8; // opacity smoothing rate for show/hide
+
 function isMobileDevice(): boolean {
   return (
     window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768
@@ -235,12 +246,12 @@ export default function ParticleStage() {
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const initialAspect = viewW / viewH;
+    const initial = computeFrustum(viewW / viewH);
     const camera = new THREE.OrthographicCamera(
-      (-FRUSTUM_HEIGHT * initialAspect) / 2,
-      (FRUSTUM_HEIGHT * initialAspect) / 2,
-      FRUSTUM_HEIGHT / 2,
-      -FRUSTUM_HEIGHT / 2,
+      -initial.halfW,
+      initial.halfW,
+      initial.halfH,
+      -initial.halfH,
       0.1,
       200,
     );
@@ -300,7 +311,7 @@ export default function ParticleStage() {
       camera.up.set(0, 0, 1);
       camera.lookAt(0, 0, 0);
       camera.updateMatrixWorld();
-      // zoom shrinks the effective ortho frustum (FRUSTUM_HEIGHT / zoom) so the
+      // zoom shrinks the effective ortho frustum (framed height / zoom) so the
       // fused helix fills the canvas. applyResize leaves camera.zoom alone, so
       // it persists across resizes and composes with the frustum bounds.
       camera.zoom = zoom;
@@ -439,6 +450,175 @@ export default function ParticleStage() {
     const neutronVel = new THREE.Vector3();
     let neutronAge = NEUTRON_LIFE + 1; // inactive
 
+    // ── Atomic-model layer ────────────────────────────────────────────────
+    // Shared small-sphere + orbit-ring geometries, reused across all three
+    // models (disposed once at unmount).
+    const nucleonGeom = new THREE.SphereGeometry(NUCLEON_R, 16, 16);
+    const electronGeom = new THREE.SphereGeometry(ELECTRON_R, 12, 12);
+    const orbitPts: number[] = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * TWO_PI;
+      orbitPts.push(Math.cos(a) * ORBIT_R, Math.sin(a) * ORBIT_R, 0);
+    }
+    const orbitGeom = new THREE.BufferGeometry();
+    orbitGeom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(orbitPts, 3),
+    );
+
+    type Electron = {
+      mesh: THREE.Mesh;
+      u: THREE.Vector3;
+      v: THREE.Vector3;
+      angle: number;
+      speed: number;
+    };
+    type AtomModel = {
+      group: THREE.Group;
+      electrons: Electron[];
+      opacity: number;
+      setOpacity: (o: number) => void;
+      dispose: () => void;
+    };
+
+    // Tight nucleon cluster offsets for up to 4 nucleons (world units).
+    const clusterOffsets = (n: number): Array<[number, number, number]> => {
+      const d = NUCLEON_R * 0.92;
+      if (n <= 1) return [[0, 0, 0]];
+      if (n === 2) return [[-d, 0, 0], [d, 0, 0]];
+      if (n === 3) return [[0, d, 0], [-d, -d * 0.6, 0], [d, -d * 0.6, 0]];
+      return [[d, d, d], [-d, -d, d], [-d, d, -d], [d, -d, -d]];
+    };
+
+    const makeLabel = (text: string, color: string) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 140;
+      const ctx = canvas.getContext("2d")!;
+      ctx.font = "600 64px 'Microsoft YaHei','PingFang SC',sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = color;
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(4.6, 2.0, 1);
+      sprite.renderOrder = 10;
+      return { sprite, material, texture };
+    };
+
+    const makeAtomModel = (
+      protons: number,
+      neutrons: number,
+      electrons: number,
+      labelText: string,
+      labelColor: string,
+    ): AtomModel => {
+      const group = new THREE.Group();
+      const mats: THREE.Material[] = []; // faded to full opacity o
+      const rings: THREE.LineBasicMaterial[] = []; // faded to a fainter o
+      const textures: THREE.Texture[] = [];
+
+      const total = protons + neutrons;
+      const offsets = clusterOffsets(total);
+      for (let i = 0; i < total; i++) {
+        const c = i < protons ? PROTON_COLOR : NEUTRON_COLOR;
+        const mat = new THREE.MeshStandardMaterial({
+          color: c,
+          emissive: c,
+          emissiveIntensity: 0.25,
+          roughness: 0.5,
+          metalness: 0.1,
+          transparent: true,
+        });
+        mats.push(mat);
+        const mesh = new THREE.Mesh(nucleonGeom, mat);
+        mesh.position.set(...offsets[i]);
+        group.add(mesh);
+      }
+
+      const els: Electron[] = [];
+      for (let e = 0; e < electrons; e++) {
+        // Orbit normal ~34° off +Z, spread in azimuth so multiple electrons
+        // cross rather than coincide.
+        const az = electrons === 1 ? 0 : (e / electrons) * TWO_PI;
+        const n = new THREE.Vector3(
+          Math.sin(0.6) * Math.cos(az),
+          Math.sin(0.6) * Math.sin(az),
+          Math.cos(0.6),
+        ).normalize();
+        const u = new THREE.Vector3(0, 0, 1).cross(n);
+        if (u.lengthSq() < 1e-4) u.set(1, 0, 0);
+        u.normalize();
+        const v = new THREE.Vector3().crossVectors(n, u).normalize();
+
+        const ringMat = new THREE.LineBasicMaterial({
+          color: ELECTRON_COLOR,
+          transparent: true,
+          opacity: 0.3,
+        });
+        rings.push(ringMat);
+        const ring = new THREE.LineLoop(orbitGeom, ringMat);
+        ring.quaternion.setFromRotationMatrix(
+          new THREE.Matrix4().makeBasis(u, v, n),
+        );
+        group.add(ring);
+
+        const elMat = new THREE.MeshStandardMaterial({
+          color: ELECTRON_COLOR,
+          emissive: ELECTRON_COLOR,
+          emissiveIntensity: 0.9,
+          roughness: 0.4,
+          metalness: 0,
+          transparent: true,
+        });
+        mats.push(elMat);
+        const mesh = new THREE.Mesh(electronGeom, elMat);
+        group.add(mesh);
+        els.push({
+          mesh,
+          u,
+          v,
+          angle: Math.random() * TWO_PI,
+          speed: ELECTRON_SPEED * (1 + e * 0.3),
+        });
+      }
+
+      const label = makeLabel(labelText, labelColor);
+      label.sprite.position.set(0, LABEL_Y, 0);
+      group.add(label.sprite);
+      mats.push(label.material);
+      textures.push(label.texture);
+
+      const setOpacity = (o: number) => {
+        for (const m of mats) m.opacity = o;
+        for (const r of rings) r.opacity = o * 0.3;
+        group.visible = o > 0.01;
+      };
+
+      const dispose = () => {
+        for (const m of mats) m.dispose();
+        for (const r of rings) r.dispose();
+        for (const t of textures) t.dispose();
+      };
+
+      return { group, electrons: els, opacity: 1, setOpacity, dispose };
+    };
+
+    const dModel = makeAtomModel(1, 1, 1, "氘 ²H", "#38bdf8");
+    const tModel = makeAtomModel(1, 2, 1, "氚 ³H", "#a78bfa");
+    const heModel = makeAtomModel(2, 2, 2, "氦 ⁴He", "#fbbf24");
+    heModel.opacity = 0;
+    heModel.setOpacity(0); // hidden until fusion
+    scene.add(dModel.group, tModel.group, heModel.group);
+
     const dummy = new THREE.Object3D();
     const seedMatrices = (h: Helix) => {
       for (let i = 0; i < countPerHelix; i++) {
@@ -455,29 +635,13 @@ export default function ParticleStage() {
     seedMatrices(deuterium);
     seedMatrices(tritium);
 
-    // Post-processing: RenderPass → BokehPass → UnrealBloomPass → OutputPass.
-    // Bokeh (depth of field) and bloom both start disabled and are enabled only
-    // during the reward window — bokeh re-renders the scene depth, so it stays
-    // off outside it. OutputPass maps emissive HDR cleanly to LDR.
+    // Post-processing: RenderPass → UnrealBloomPass → OutputPass. Bloom starts
+    // disabled and is enabled only during the reward window. OutputPass maps
+    // emissive HDR cleanly to LDR.
     const composer = new EffectComposer(renderer);
     composer.setPixelRatio(pixelRatio);
     composer.setSize(viewW, viewH);
     composer.addPass(new RenderPass(scene, camera));
-    // Depth of field focusing the front of the fused nucleus. The BokehShader's
-    // default is a perspective camera; flip the define so it linearizes depth
-    // for our OrthographicCamera (orthographicDepthToViewZ) and focuses by real
-    // distance. focus is updated per-frame to track the growing nucleus front.
-    const bokehPass = new BokehPass(scene, camera, {
-      focus: CAM_DIST - HELIX_OUTER,
-      aperture: BOKEH_APERTURE,
-      maxblur: BOKEH_MAXBLUR,
-    });
-    bokehPass.materialBokeh.defines.PERSPECTIVE_CAMERA = 0;
-    bokehPass.materialBokeh.needsUpdate = true;
-    bokehPass.enabled = false;
-    // BokehPass.uniforms is typed as `object`; grab the focus uniform typed.
-    const bokehFocus = bokehPass.materialBokeh.uniforms.focus as { value: number };
-    composer.addPass(bokehPass);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(viewW, viewH),
       0,
@@ -499,12 +663,11 @@ export default function ParticleStage() {
       renderer.setSize(w, h);
       composer.setSize(w, h);
       bloomPass.setSize(w, h);
-      bokehPass.setSize(w, h);
-      const aspect = w / h;
-      camera.left = (-FRUSTUM_HEIGHT * aspect) / 2;
-      camera.right = (FRUSTUM_HEIGHT * aspect) / 2;
-      camera.top = FRUSTUM_HEIGHT / 2;
-      camera.bottom = -FRUSTUM_HEIGHT / 2;
+      const { halfW, halfH } = computeFrustum(w / h);
+      camera.left = -halfW;
+      camera.right = halfW;
+      camera.top = halfH;
+      camera.bottom = -halfH;
       camera.updateProjectionMatrix();
     };
     const resizeObserver = new ResizeObserver(() => {
@@ -766,15 +929,9 @@ export default function ParticleStage() {
         rewardTime += dt;
         const t = Math.min(1, rewardTime / LOCK_DURATION);
         const e = t * t * t * (t * (t * 6 - 15) + 10);
-        // Zoom eases in on its own (shorter) timeline, then holds at PAN_ZOOM so
-        // the fused helix fills the canvas for most of the window.
-        const zt = Math.min(1, rewardTime / ZOOM_IN_DURATION);
-        const ze = zt * zt * zt * (zt * (zt * 6 - 15) + 10);
-        setCameraPose(
-          PRESET_A_AZ + (PRESET_B_AZ - PRESET_A_AZ) * e,
-          PAN_TILT,
-          1 + (PAN_ZOOM - 1) * ze,
-        );
+        // Calm reward: no azimuth pan, no zoom (the ⁴He model sits to the right
+        // and must stay framed + sharp) — just a gentle eased tilt-up for life.
+        setCameraPose(0, TILT + (PAN_TILT - TILT) * e, 1);
         camPanning = true;
         camReturning = false; // a fresh reaction cancels any in-flight return
       } else {
@@ -789,11 +946,8 @@ export default function ParticleStage() {
           camReturnTime += dt;
           const t = Math.min(1, camReturnTime / CAM_RETURN_DURATION);
           const e = t * t * t * (t * (t * 6 - 15) + 10);
-          setCameraPose(
-            PRESET_B_AZ + (0 - PRESET_B_AZ) * e,
-            PAN_TILT + (TILT - PAN_TILT) * e,
-            PAN_ZOOM + (1 - PAN_ZOOM) * e,
-          );
+          // Ease the gentle tilt back down to the default view.
+          setCameraPose(0, PAN_TILT + (TILT - PAN_TILT) * e, 1);
           if (t >= 1) camReturning = false;
         }
       }
@@ -853,15 +1007,6 @@ export default function ParticleStage() {
       bloomPass.enabled = bloomStrength > 0;
       bloomPass.strength = bloomStrength;
 
-      // Depth of field only during the reward window. Focus the front edge of
-      // the fused nucleus so it stays sharp as it grows to FUSION_RADIUS_SCALE;
-      // the camera is always CAM_DIST from origin looking at it, so the front is
-      // HELIX_OUTER·radiusScale nearer than the center.
-      bokehPass.enabled = locked;
-      if (locked) {
-        bokehFocus.value = CAM_DIST - HELIX_OUTER * deuterium.radiusScale;
-      }
-
       tmpColor.copy(deuteriumOriginalColor).lerp(colorGold, colorMix);
       deuterium.material.color.copy(tmpColor);
       deuterium.material.emissive.copy(colorGold).multiplyScalar(colorMix);
@@ -871,6 +1016,32 @@ export default function ParticleStage() {
       tritium.material.color.copy(tmpColor);
       tritium.material.emissive.copy(colorGold).multiplyScalar(colorMix);
       tritium.material.emissiveIntensity = emissiveI;
+
+      // Atomic models: D & T ride above their helix and fade out while merged
+      // (flash/lock); the ⁴He model fades in during lock to the right of the
+      // fused nucleus. Electrons orbit continuously.
+      const dtTarget = locked ? 0 : 1;
+      const heTarget = stage === "lock" ? 1 : 0;
+      const modelAlpha = 1 - Math.exp(-MODEL_FADE_K * dt);
+      dModel.opacity += (dtTarget - dModel.opacity) * modelAlpha;
+      tModel.opacity += (dtTarget - tModel.opacity) * modelAlpha;
+      heModel.opacity += (heTarget - heModel.opacity) * modelAlpha;
+      dModel.setOpacity(dModel.opacity);
+      tModel.setOpacity(tModel.opacity);
+      heModel.setOpacity(heModel.opacity);
+      dModel.group.position.set(deuterium.centerX, deuterium.centerY + MODEL_Y, 0);
+      tModel.group.position.set(tritium.centerX, tritium.centerY + MODEL_Y, 0);
+      heModel.group.position.set(HE_MODEL_X, 0, 0);
+      for (const model of [dModel, tModel, heModel]) {
+        if (!model.group.visible) continue;
+        for (const el of model.electrons) {
+          el.angle += el.speed * dt;
+          el.mesh.position
+            .copy(el.u)
+            .multiplyScalar(Math.cos(el.angle) * ORBIT_R)
+            .addScaledVector(el.v, Math.sin(el.angle) * ORBIT_R);
+        }
+      }
 
       // Charge meter: fills 0→1 during charging; stays full through the reward.
       const fill = chargeFillRef.current;
@@ -909,8 +1080,13 @@ export default function ParticleStage() {
       neutronMat.dispose();
       backdropGeom.dispose();
       backdropMat.dispose();
+      dModel.dispose();
+      tModel.dispose();
+      heModel.dispose();
+      nucleonGeom.dispose();
+      electronGeom.dispose();
+      orbitGeom.dispose();
       bloomPass.dispose();
-      bokehPass.dispose();
       composer.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode) {

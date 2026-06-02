@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export function useVideoDevices(): {
+export function useVideoDevices(enabled = false): {
   devices: MediaDeviceInfo[];
   refresh: () => void;
 } {
@@ -19,16 +19,17 @@ export function useVideoDevices(): {
   }, []);
 
   useEffect(() => {
+    // Deferred until the demo opens (enabled) so first load enumerates nothing.
     // mediaDevices is undefined in non-secure contexts (http:// on a LAN IP)
     // and some embedded WebViews. Don't crash the React tree.
-    if (!navigator.mediaDevices) return;
+    if (!enabled || !navigator.mediaDevices) return;
     refresh();
     const onChange = () => refresh();
     navigator.mediaDevices.addEventListener("devicechange", onChange);
     return () => {
       navigator.mediaDevices.removeEventListener("devicechange", onChange);
     };
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   return { devices, refresh };
 }

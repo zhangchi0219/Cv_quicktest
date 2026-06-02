@@ -84,10 +84,17 @@ export type CameraState =
 export function useCamera(
   videoRef: React.RefObject<HTMLVideoElement>,
   deviceId?: string,
+  active = true,
 ) {
   const [state, setState] = useState<CameraState>({ kind: "idle" });
 
   useEffect(() => {
+    // Deferred until the demo view is open. When inactive, hold no stream and
+    // report idle; the cleanup of a previous active run already stopped tracks.
+    if (!active) {
+      setState({ kind: "idle" });
+      return;
+    }
     let cancelled = false;
     let activeStream: MediaStream | null = null;
 
@@ -123,7 +130,7 @@ export function useCamera(
       cancelled = true;
       activeStream?.getTracks().forEach((t) => t.stop());
     };
-  }, [videoRef, deviceId]);
+  }, [videoRef, deviceId, active]);
 
   return state;
 }

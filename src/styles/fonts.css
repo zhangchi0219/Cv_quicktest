@@ -1,0 +1,33 @@
+/* ============================================================
+   Self-hosted Latin faces (studio house style).
+   - Display: Bricolage Grotesque 800
+   - Mono labels / equations: JetBrains Mono 500
+   Both are Latin-subset woff2 (a few KB each); Chinese glyphs are
+   served by the system CJK stack at the end of each token chain
+   (PingFang SC / Microsoft YaHei / Noto Sans SC) — zero download.
+   No fonts.googleapis.com link anywhere (unreliable behind the GFW);
+   see studio-web-ui references/fonts-china.md.
+   Files live in ../assets/fonts so Vite fingerprints + rewrites the
+   URL honoring vite base:"./" — never hardcode a leading "/".
+   ============================================================ */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("../assets/fonts/bricolage-grotesque-v9-latin-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  /* Latin-only subset; Chinese comes from the CJK fallback, not this face. */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+2074,
+                 U+20AC, U+2122, U+2212;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono-v24-latin-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+2074,
+                 U+20AC, U+2122, U+2212;
+}

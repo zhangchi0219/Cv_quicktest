@@ -1,154 +1,191 @@
-:root {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color-scheme: dark;
-  background: #05070a;
-  color: #e6e8eb;
-}
+/* Studio house style: tokens → base wiring → self-hosted Latin faces.
+ * Must come before any rule below (CSS requires @import first). */
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/fonts.css";
 
+/* ── App shell ─────────────────────────────────────────────────────────
+ * Single-viewport "stage" app: the page itself never scrolls; the live
+ * three.js block stays on-screen and the description column scrolls inside
+ * the sidebar. base.css already paints body with the warm --canvas + ink. */
+html {
+  height: 100%;
+}
 body {
-  margin: 0;
-  min-height: 100vh;
-  overflow: hidden; /* fusion stage is full-bleed; nothing scrolls behind it */
-}
-
-#root {
-  width: 100vw;
-  height: 100vh;
-}
-
-/* ── Full-screen fusion stage (hero / background layer) ───────────────── */
-
-.particle-stage {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 0;
   overflow: hidden;
-  /* Radial deep-space wash so the box reads as a scene before WebGL paints
-   * (and around any 1px rounding gap). The charging "background flash" lives
-   * inside the canvas as a lit backdrop plane — never on the page. */
-  background: radial-gradient(circle at 50% 45%, #0d1320 0%, #05070a 70%);
+}
+#root {
+  height: 100vh;
 }
 
-.particle-stage canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+/* ── 3/7 split: description sidebar (left) + scene panel (right) ──────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--split-sidebar) var(--split-content);
+  height: 100vh;
+  max-width: var(--maxw);
+  margin-inline: auto;
 }
 
-/* Coulomb-barrier charge meter across the top of the canvas. Fill is driven
- * imperatively (transform: scaleX(t)) from the animate loop. */
-.charge-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.08);
-  z-index: 5;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 220ms ease;
+.sidebar {
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--s6);
+  border-right: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
-.charge-bar-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #38bdf8, #a78bfa 55%, #fbbf24);
-  transform-origin: left center;
-  transform: scaleX(0);
-}
-
-.charge-bar-label {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.74rem;
-  letter-spacing: 1px;
-  color: #bae6fd;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-  white-space: nowrap;
-}
-
-/* Energy label revealed during the reward window (flash + lock), driven
- * imperatively via opacity. */
-.fusion-burst-label {
-  position: absolute;
-  left: 50%;
-  bottom: 12%;
-  transform: translateX(-50%);
+/* One stage at a time; keying by view replays this entrance on switch. */
+.sidebar-view {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  z-index: 5;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 300ms ease;
-  text-align: center;
+  gap: var(--s4);
+  min-height: 100%; /* lets the intro CTA's margin-top:auto reach the bottom */
+  animation: viewIn 280ms ease both;
 }
 
-.fusion-burst-eq {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #fde68a;
-  letter-spacing: 0.5px;
-  text-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+@keyframes viewIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.fusion-burst-energy {
-  font-size: 0.85rem;
-  color: #fbbf24;
-  letter-spacing: 1px;
+.stage-panel {
+  position: relative; /* anchors the scene-load error fallback */
+  height: 100vh;
+  padding: var(--s4);
 }
 
-/* ── Header overlay (top-left) ────────────────────────────────────────── */
+/* ── Sidebar typography ──────────────────────────────────────────────── */
 
-.page-header {
-  position: fixed;
-  top: 20px;
-  left: 24px;
-  z-index: 20;
-  pointer-events: none;
+.brand {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
 }
 
-h1 {
-  font-size: 1.3rem;
-  margin: 0 0 4px;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
 }
 
-.subtitle {
-  color: #9aa6b4;
+.brand-title {
   margin: 0;
-  font-size: 0.85rem;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: var(--leading-tight);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  letter-spacing: -0.01em;
 }
 
-/* ── Camera picture-in-picture (bottom-right) ─────────────────────────── */
+.lead {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: var(--leading-tight);
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+}
 
-.pip-camera {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 30;
-  width: min(280px, 38vw);
+/* ── Explainer: mono-numbered sections, body sans, equation chips ────── */
+
+.explainer {
+  counter-reset: sec;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  font-size: 0.9rem; /* smaller description body */
+}
+
+.explainer h3 {
+  counter-increment: sec;
+  margin: var(--s4) 0 var(--s2);
+  font: 500 var(--fs-label) / 1.3 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.explainer h3::before {
+  content: counter(sec, decimal-leading-zero) " — ";
+}
+
+.explainer p {
+  margin: 0 0 var(--s3);
+  line-height: 1.6;
+}
+
+.explainer ul {
+  margin: 0 0 var(--s3);
+  padding-left: 1.2em;
+}
+
+.explainer li {
+  margin: var(--s1) 0;
+  line-height: 1.55;
+}
+
+.explainer strong {
+  font-weight: 700;
+}
+
+.explainer code {
+  font: 500 0.9em / 1 var(--font-mono);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* A paragraph that is only an equation becomes a centered surface block. */
+.explainer p > code:only-child {
+  display: block;
+  font-size: 1rem;
+  padding: var(--s3);
+  text-align: center;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius);
+}
+
+/* ── Camera demo (stage 2): large preview + full-width controls ──────── */
+
+.camera-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.back-link {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: 500 var(--fs-label) / 1 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.back-link:hover {
+  color: var(--ink);
 }
 
 .pip-stage {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  background: #000;
-  border-radius: 10px;
+  background: #0b0d10;
+  border-radius: var(--radius);
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
 }
 
 .pip-stage video,
@@ -169,72 +206,171 @@ h1 {
   transform: scaleX(-1); /* stay aligned with the mirrored video */
 }
 
-.pip-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  background: rgba(11, 13, 16, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  font-size: 0.78rem;
-}
-
-.pip-controls label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-
-.pip-controls select {
-  max-width: 110px;
-  background: #1a1f26;
-  color: #e6e8eb;
-  border: 1px solid #2a3038;
-  border-radius: 4px;
-  padding: 2px 4px;
-  font-size: 0.75rem;
+/* Dropdown spans the full camera width (stacked beneath the preview). */
+.camera-select {
+  width: 100%;
+  font: 500 var(--fs-label) / 1 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: var(--radius-pill);
+  padding: var(--s2) var(--s3);
+  cursor: pointer;
 }
 
 .pip-status {
-  color: #8a93a0;
-  text-align: right;
+  font: 500 var(--fs-label) / 1.3 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 600px) {
-  .pip-camera {
-    width: 46vw;
-  }
+.demo-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
 }
 
-/* ── Model loader / errors (inside the PiP stage) ─────────────────────── */
+/* ── One hot block: the gameplay CTA banner ──────────────────────────── */
+
+.cta {
+  margin-top: auto; /* pin to the bottom of the scrolling sidebar */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  background: var(--hot);
+  color: var(--on-hot);
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: var(--s3) var(--s4);
+  font: 700 1rem / 1.2 var(--font-display);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cta::after {
+  content: "→";
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+/* ── Dark scene block (right) ────────────────────────────────────────── */
+
+.particle-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius);
+  overflow: hidden; /* clip the WebGL canvas to the rounded block */
+  /* Radial deep-space wash so the box reads as a scene before WebGL paints.
+   * The charging "background flash" lives inside the canvas as a lit backdrop
+   * plane — never on the page. */
+  background: radial-gradient(circle at 50% 45%, #0d1320 0%, #05070a 70%);
+}
+
+.particle-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Coulomb-barrier charge meter, inset + pill-rounded to sit inside the block.
+ * Fill is driven imperatively (transform: scaleX(t)) from the animate loop. */
+.charge-bar {
+  position: absolute;
+  top: var(--s2);
+  left: var(--s2);
+  right: var(--s2);
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-pill);
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.charge-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #38bdf8, #a78bfa 55%, #fbbf24);
+  border-radius: var(--radius-pill);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.charge-bar-label {
+  position: absolute;
+  top: calc(var(--s2) + 11px);
+  left: 50%;
+  transform: translateX(-50%);
+  font: 500 var(--fs-label) / 1 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: #bae6fd;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+/* Energy label revealed during the reward window (flash + lock), driven
+ * imperatively via opacity. */
+.fusion-burst-label {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s1);
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  text-align: center;
+}
+
+.fusion-burst-eq {
+  font: 700 1.1rem / 1.2 var(--font-mono);
+  color: #fde68a;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+}
+
+.fusion-burst-energy {
+  font: 500 var(--fs-label) / 1 var(--font-mono);
+  letter-spacing: var(--tracking-label);
+  color: #fbbf24;
+}
+
+/* ── Model loader / errors (inside the dark PiP or scene block) ───────── */
 
 .model-loader {
   position: absolute;
   inset: 0;
-  background: rgba(5, 7, 10, 0.92);
+  background: rgba(11, 13, 16, 0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px;
-  z-index: 100;
+  gap: var(--s1);
+  padding: var(--s2);
+  z-index: 10;
+  text-align: center;
+  overflow: hidden;
 }
 
 .model-loader-title {
   margin: 0;
-  font-size: 0.85rem;
+  font: 600 0.82rem / 1.3 var(--font-body);
   color: #e6e8eb;
-  text-align: center;
 }
 
 .model-loader-title.error {
@@ -243,133 +379,67 @@ h1 {
 
 .model-loader-phase {
   margin: 0;
-  font-size: 0.72rem;
+  font: 500 var(--fs-label) / 1.2 var(--font-mono);
+  letter-spacing: var(--tracking-label);
   color: #8a93a0;
   min-height: 1.2em;
-  text-align: center;
 }
 
 .progress-bar {
   width: 80%;
   height: 6px;
-  background: #1a1f26;
-  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #38bdf8, #a78bfa);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   transition: width 0.15s ease-out;
 }
 
 .progress-text {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font: 700 1rem / 1 var(--font-mono);
   color: #93c5fd;
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Explainer drawer + toggle ────────────────────────────────────────── */
-
-.explainer-toggle {
-  position: fixed;
-  right: 20px;
-  top: 20px;
-  z-index: 50;
-  padding: 10px 18px;
-  border-radius: 999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.explainer-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: 100vh;
-  width: min(420px, 92vw);
-  background: rgba(13, 17, 24, 0.95);
-  border-left: 1px solid #2a3038;
-  padding: 60px 18px 18px;
-  overflow-y: auto;
-  transform: translateX(100%);
-  transition: transform 240ms ease;
-  z-index: 40;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  color: #c0c6cc;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.explainer-drawer[data-open="true"] {
-  transform: translateX(0);
-}
-
-.explainer-drawer h2 {
-  font-size: 1.05rem;
-  margin: 0 0 6px;
-  color: #e6e8eb;
-}
-
-.explainer-drawer h3 {
-  font-size: 0.92rem;
-  margin: 18px 0 6px;
-  color: #93c5fd;
-  font-weight: 600;
-}
-
-.explainer-drawer p {
-  margin: 0 0 8px;
-}
-
-.explainer-drawer ul,
-.explainer-drawer ol {
-  margin: 4px 0 8px;
-  padding-left: 22px;
-}
-
-.explainer-drawer li {
-  margin: 4px 0;
-}
-
-.explainer-drawer code {
-  background: #1a1f26;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 0.85em;
-  color: #fbbf24;
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
-
-.explainer-drawer strong {
-  color: #e6e8eb;
-}
-
-.lesson-description {
-  color: #8a93a0;
-  margin: 0 0 12px;
-  font-size: 0.9rem;
-}
-
+/* Error text on the light sidebar (camera status). On the dark loader the
+ * .model-loader-title.error rule above wins with a lighter red. */
 .error {
-  color: #ff6b6b;
+  color: #c62f1c;
 }
 
-button {
-  background: #2563eb;
-  color: white;
-  border: 0;
-  padding: 8px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
+/* ── Responsive: stack to one column, scene first ────────────────────── */
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+@media (max-width: 860px) {
+  body {
+    overflow: auto;
+  }
+  #root {
+    height: auto;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-width: none;
+  }
+  .sidebar {
+    height: auto;
+    overflow: visible;
+    padding: var(--s4);
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  }
+  .stage-panel {
+    height: 70vh;
+    padding: var(--s3);
+    order: -1; /* canvas first on mobile */
+  }
+  .cta {
+    margin-top: var(--s2);
+  }
 }
