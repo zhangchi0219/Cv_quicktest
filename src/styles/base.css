@@ -12,7 +12,7 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font: 400 var(--fs-body)/1.5 var(--font-body);
+  font: 300 var(--fs-body)/1.5 var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 

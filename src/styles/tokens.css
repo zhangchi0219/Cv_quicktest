@@ -43,8 +43,9 @@
   /* — Type scale. Display is deliberately oversized. — */
   --fs-display:     clamp(3rem, 9vw, 7rem);     /* hero / sidebar heading */
   --fs-card-title:  clamp(1.6rem, 3.2vw, 2.4rem);
-  --fs-body:        1.0625rem;                  /* 17px */
-  --fs-label:       0.75rem;                    /* 12px mono labels */
+  --fs-body:        0.75rem;                     /* 12px — small, light (300) body so the heavy title/subtitle outrank it */
+  --fs-subtitle:    1.5rem;                      /* 24px — subtitle/deck under a heading, larger than body */
+  --fs-label:       0.75rem;                    /* 12px mono labels (functional micro-labels) */
   --tracking-label: 0.08em;                     /* letter-spacing for labels */
   --leading-tight:  0.95;                       /* display line-height */
 

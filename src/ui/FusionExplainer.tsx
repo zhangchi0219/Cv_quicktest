@@ -1,7 +1,8 @@
 // Left-pane teaching copy for the deuterium–tritium fusion scene. Split into two
 // parts: FusionPrinciple (核聚变原理 + 意义 + 方程/质量亏损/库仑势垒 — shown on the
-// intro page) and FusionInteraction (这是什么 + 手势映射 + 玩法 — shown on the demo
-// page). zh-CN per project convention.
+// intro page) and FusionInteraction (the demo page, framed as a gallery
+// interactive exhibit: 动手引导 + 精简操作 + 一段串联托卡马克/中国人造太阳/下一展项引子).
+// zh-CN per project convention.
 export function FusionPrinciple() {
   return (
     <>
@@ -53,31 +54,43 @@ export function FusionPrinciple() {
 export function FusionInteraction() {
   return (
     <>
-      <h3>这是什么</h3>
+      <h3>动手让两个原子核聚变</h3>
       <p>
-        两只手分别是两个<strong>原子核</strong>：左手是<strong>氘核</strong>
-        （²H，1 个质子 + 1 个中子），右手是<strong>氚核</strong>
-        （³H，1 个质子 + 2 个中子）。把两团核云慢慢靠到一起、顶住排斥力别松手，
-        蓄满后就会<strong>聚变</strong>。
+        这件展项邀请你<strong>用双手亲手促成一次核聚变</strong>。你的
+        <strong>左手是氘核</strong>（²H，1 质子 + 1 中子），
+        <strong>右手是氚核</strong>（³H，1 质子 + 2 中子）。张开双手，
+        两团核云就会跟着你在画面里移动——接下来，把它们推到一起。
       </p>
 
-      <h3>手势怎么映射</h3>
+      <h3>怎么互动</h3>
       <ul>
         <li>
-          <strong>手的位置</strong> → 原子核在画面中的位置
+          <strong>移动手掌</strong> → 核云在画面中的位置
         </li>
         <li>
-          <strong>拇指↔食指捏合距离</strong> → 核云的大小（捏紧变小、张开变大）
+          <strong>拇指↔食指捏合</strong> → 核云大小（捏紧变小、张开变大）
         </li>
         <li>
-          <strong>两核重叠并保持</strong> → 蓄能 → 聚变闪光 → 氦核生成 + 中子弹出
+          <strong>把两团核云缓缓推到一起、顶住排斥力别松手</strong> → 顶部
+          「库仑势垒」蓄能条填满 → 聚变闪光、金色氦核生成、中子高速弹出
         </li>
       </ul>
-
-      <h3>玩法</h3>
       <p>
-        张开双手，看两团核云分别跟着左右手移动；慢慢把它们靠拢、稳住，
-        让顶部「库仑势垒」蓄能条填满，就能看到聚变闪光、金色氦核与高速弹出的中子。
+        关键就是那一下<strong>「稳住，别松手」</strong>——你能亲手感到两个核
+        互相排斥、却又被你一点点逼近的张力。
+      </p>
+
+      <h3>从你的双手到真正的太阳</h3>
+      <p>
+        现实中要让聚变持续发生，等离子体得烧到<strong>上亿度</strong>，
+        没有任何容器盛得住——科学家于是用<strong>强磁场</strong>把它约束成一个
+        <strong>甜甜圈形的磁笼</strong>、悬空旋转，这就是<strong>托卡马克</strong>；
+        你刚才「顶住别松手」的那股劲，正是现实里用磁场维持高温高压的难题。
+        中国是这条路上的重要力量：合肥的全超导托卡马克
+        <strong>EAST（东方超环，「人造太阳」）</strong>不断刷新等离子体运行时长纪录，
+        成都的<strong>中国环流三号（HL-3）</strong>也在推进燃烧等离子体实验，
+        人类正一步步<strong>把恒星的能量带回地球</strong>。你已经亲手点燃了一次聚变——
+        <strong>下一个展项，我们将走进托卡马克内部。</strong>
       </p>
     </>
   );

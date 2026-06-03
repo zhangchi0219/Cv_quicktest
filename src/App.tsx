@@ -8,11 +8,15 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { useCamera } from "./camera/useCamera";
 import { useVideoDevices } from "./camera/useVideoDevices";
 import type { Detectors } from "./cv/mediapipe";
 import { useHandTracking } from "./cv/useHandTracking";
 import { FusionPrinciple, FusionInteraction } from "./ui/FusionExplainer";
+
+gsap.registerPlugin(useGSAP);
 
 // The fusion scene fills the right-hand stage panel. Lazy so the three.js chunk
 // only downloads after the rest of the UI has painted; if it never loads, the
@@ -51,6 +55,7 @@ class SceneErrorBoundary extends ReactComponent<
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [deviceId, setDeviceId] = useState<string | undefined>();
 
   // Two-stage left panel. The intro (description) loads nothing; entering the
@@ -64,6 +69,31 @@ export default function App() {
     setView("demo");
   };
   const exitDemo = () => setView("intro");
+
+  // Entrance for the sidebar copy, replayed on every intro/demo switch (the
+  // `view` dependency re-runs the hook; the keyed .sidebar-view remounts so the
+  // fresh nodes are in place). Title leads, subtitle follows with overlap, then
+  // the body blocks stagger in. Skipped under prefers-reduced-motion. Selectors
+  // are scoped to the sidebar; each tween always matches ≥1 element per view.
+  useGSAP(
+    () => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      gsap
+        .timeline({ defaults: { ease: "power3.out" } })
+        .from(".brand-title, .lead", { y: 20, opacity: 0, duration: 0.55 })
+        .from(
+          ".brand-text .label",
+          { y: 14, opacity: 0, duration: 0.45 },
+          "-=0.3",
+        )
+        .from(
+          ".explainer, .cta, .camera-control, .back-link",
+          { y: 12, opacity: 0, duration: 0.4, stagger: 0.08 },
+          "-=0.25",
+        );
+    },
+    { scope: sidebarRef, dependencies: [view] },
+  );
 
   const cam = useCamera(videoRef, deviceId, cameraActive);
   const { devices, refresh: refreshDevices } = useVideoDevices(demoStarted);
@@ -132,7 +162,7 @@ export default function App() {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <aside className="sidebar" ref={sidebarRef}>
         {view === "intro" ? (
           <div className="sidebar-view" key="intro">
             <header className="brand">
@@ -158,7 +188,6 @@ export default function App() {
 
             <header className="brand">
               <div className="brand-text">
-                <span className="label">交互原理 · HOW IT WORKS</span>
                 <p className="lead">双手即两个原子核</p>
               </div>
             </header>

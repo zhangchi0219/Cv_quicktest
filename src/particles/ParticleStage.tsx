@@ -4,6 +4,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { AfterimagePass } from "three/examples/jsm/postprocessing/AfterimagePass.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { landmarkBus } from "./landmarkBus";
 
@@ -50,7 +51,7 @@ const FLOW_OMEGA = 0.45;
 const TWO_PI = Math.PI * 2;
 const SPRING_K = 9.0;
 const DAMPING = 0.92;
-const CUBE_SIZE = 0.09;
+const CUBE_SIZE = 0.06;
 // Pinch (cm) → helix radius scale. Closed pinch ⇒ contracted helix, opened
 // pinch ⇒ slightly larger than default. Missing hand falls back to default
 // scale 1.0 (smoothly).
@@ -92,11 +93,12 @@ function computeFrustum(aspect: number): { halfW: number; halfH: number } {
 // allocation, no GC churn.
 const LIFETIME = 5.0;
 const FADE = 0.3;
-// Strand tube radius. Each particle gets a constant (offsetU, offsetV) inside
-// a disk of radius TUBE_R; eU = world +Z, eV = radial-in-XY at the particle's
-// current θ. ~23% of R_MINOR — visible volume without losing the double-helix
-// silhouette.
-const TUBE_R = 0.55;
+// Strand tube cross-section. Each particle gets a constant (offsetU, offsetV)
+// inside an ELLIPSE: eU = world +Z (out-of-plane "thickness"), eV = radial-in-XY
+// (in-plane "width"). Flattened into a thin, wide ribbon — small thickness, large
+// width — so the strand reads as a broad flowing band rather than a round rope.
+const TUBE_THICK = 0.25; // z half-axis (offsetU) — thin
+const TUBE_WIDE = 0.95; // radial half-axis (offsetV) — wide
 // Divergence-free curl noise from a sin-based stream function. Each ψ-component
 // depends on a single coordinate so the curl collapses to one cos per axis; the
 // field is divergence-free, so it perturbs velocity without inflating or
@@ -109,7 +111,7 @@ const NOISE_PHI2 = 2.718;
 
 // Idle home offset (world units): deuterium parks left, tritium right, so the
 // first paint already shows them separated. Each helix's max radius
-// (R_MAJOR + R_MINOR + TUBE_R) is ~7.15, so at ±8 the strands are visibly
+// (R_MAJOR + R_MINOR + TUBE_WIDE) is ~7.55, so at ±8 the strands are visibly
 // separated; users have to bring their hands together to overlap them.
 const HOME_OFFSET = 8;
 
@@ -118,7 +120,7 @@ const HOME_OFFSET = 8;
 // center-distance gives a clean analytic alternative.
 //   HELIX_OUTER = farthest particle radius from center (main + minor + tube).
 //   Per-helix effective outer radius = HELIX_OUTER × radiusScale.
-const HELIX_OUTER = R_MAJOR + R_MINOR + TUBE_R;
+const HELIX_OUTER = R_MAJOR + R_MINOR + TUBE_WIDE;
 // rawPct = (1 − d / (FAR_MULT · sumR)) × 100, clamped to [0, 100].
 // FAR_MULT = 5/3 puts d = sumR (outer edges just touching) at ~40%;
 // d = 0 (concentric) is 100%.
@@ -158,6 +160,16 @@ const BLOOM_THRESHOLD = 0.6;
 const AMBIENT_BASE = 0.3;
 const AMBIENT_FLASH_PEAK = 3.0;
 const EMISSIVE_MAX = 2.5;
+// Feedback trail (AfterimagePass): a restrained screen-space afterimage so the
+// flowing particles leave short tails. damp = persistence (higher = longer). We
+// ride damp to ~0 while the camera is moving (orbit / scripted pan) so the whole
+// frame doesn't smear, then ease it back up when the camera settles.
+const AFTERIMAGE_DAMP = 0.85;
+// Random per-particle twinkle: a fraction of particles pulse brighter (via
+// instanceColor, multiplied into the diffuse) + slightly larger on their own
+// cycle, like sparkling highlights along the strands.
+const FLICKER_FRACTION = 0.08; // share of particles that twinkle
+const FLICKER_BRIGHT = 3.0; // peak instanceColor multiplier at a flash
 
 // Ejected neutron: a single pale, emissive sphere launched from the fusion
 // point at flash start, flying off mostly in-plane and fading out over its
@@ -173,11 +185,20 @@ const NEUTRON_SIZE = 0.55;
 // regardless of the dramatic scene lighting.
 const PROTON_COLOR = 0xef4444; // red
 const NEUTRON_COLOR = 0x94a3b8; // slate
+// Both nucleons use a rough, matte surface (no reflections / envMap). They
+// differ only in tint + self-emissive: protons carry a strong red glow so they
+// read as the "hot" nucleus; neutrons keep a small emissive baseline so the
+// slate stays visible on the dark stage.
+const PROTON_GLOW = 1.0; // doubled emissive glow on the matte protons
+const NEUTRON_EMISSIVE = 0.18;
+const NUCLEON_METALNESS = 0.1;
+const NUCLEON_ROUGHNESS = 0.9;
 const ELECTRON_COLOR = 0x7dd3fc; // cyan-white
 const NUCLEON_R = 0.42;
 const ELECTRON_R = 0.18;
 const ORBIT_R = 2.2; // electron orbit radius (world units)
 const ELECTRON_SPEED = 1.6; // base orbital rate (rad/s)
+const MODEL_SPIN = 0.5; // whole-model turntable spin around its own Y axis (rad/s)
 const MODEL_Y = 10; // model height above its helix center (clears the helix)
 const LABEL_Y = 3.3; // label height above the model nucleus
 const HE_MODEL_X = 12; // ⁴He model x, to the right of the origin nucleus
@@ -201,6 +222,10 @@ type Helix = {
   ages: Float32Array;
   offsetU: Float32Array;
   offsetV: Float32Array;
+  // Per-particle twinkle: flickerFreq[i] = pulse rate (rad/s; 0 = steady),
+  // flickerPhase[i] = phase offset. Drives instanceColor brightness + a scale pop.
+  flickerFreq: Float32Array;
+  flickerPhase: Float32Array;
   phase: number;
   // +1 = forward flow along φ, -1 = reverse. Deuterium forward, tritium reverse
   // gives the anti-parallel DNA-strand look.
@@ -240,7 +265,7 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     let viewH = Math.max(1, Math.floor(initialRect.height));
 
     const isMobile = isMobileDevice();
-    const countPerHelix = isMobile ? 1000 : 4000;
+    const countPerHelix = isMobile ? 1500 : 4000;
     const pixelRatio = Math.min(window.devicePixelRatio, 2);
 
     const renderer = new THREE.WebGLRenderer({
@@ -250,7 +275,12 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     });
     renderer.setPixelRatio(pixelRatio);
     renderer.setClearColor(0x000000, 0);
-    renderer.setSize(viewW, viewH);
+    // updateStyle=false: don't let three.js write an inline px width/height onto
+    // the canvas. The CSS rule (.particle-stage canvas { width:100%; height:100% })
+    // drives the display size instead. An inline px width would otherwise become
+    // the grid item's min-content floor, so the 63fr column couldn't shrink below
+    // the canvas's last pixel width — the canvas would stop following the window.
+    renderer.setSize(viewW, viewH, false);
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -342,22 +372,19 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     // User-draggable camera for the intro page: orbit (rotate) + zoom around the
     // scene center, no pan so (0,0,0) stays framed. Disabled while the demo is
     // active — there the scripted reward camera (setCameraPose) owns the view.
-    // Skipped entirely on touch/mobile: OrbitControls sets touch-action:none on
-    // the canvas, which would trap vertical page scroll over the (tall) scene.
-    // Mobile gets a static showcase scene so the page scrolls normally.
-    const controls = isMobile
-      ? null
-      : new OrbitControls(camera, renderer.domElement);
-    if (controls) {
-      controls.target.set(0, 0, 0);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
-      controls.enablePan = false;
-      controls.enableZoom = true;
-      controls.minZoom = 0.6;
-      controls.maxZoom = 3;
-      controls.enabled = interactiveRef.current;
-    }
+    // Enabled on touch/mobile too: OrbitControls sets touch-action:none on the
+    // canvas, but on mobile the scene is pinned (position:fixed, 60vh) at the top
+    // and the copy scrolls *below* it, so dragging on the canvas rotates without
+    // fighting the page's vertical scroll.
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan = false; // no pan, (0,0,0) stays centered
+    controls.enableZoom = true; // wheel (desktop) / pinch (mobile) to zoom
+    controls.minZoom = 0.6;
+    controls.maxZoom = 3;
+    controls.enabled = interactiveRef.current;
 
     const cubeGeom = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
 
@@ -369,13 +396,14 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     const respawnParticle = (h: Helix, i: number) => {
       const phi = h.phi[i];
 
-      // Disk-uniform offset in (eU, eV). sqrt(u) keeps density flat out to
-      // r = TUBE_R; without it the tube would be denser near the axis.
+      // Elliptical cross-section offset in (eU, eV). sqrt(u) keeps density flat
+      // across the disk; the two half-axes flatten it into a thin (z), wide
+      // (radial) ribbon.
       const u = Math.random();
       const tau = Math.random() * Math.PI * 2;
-      const r = TUBE_R * Math.sqrt(u);
-      const oU = r * Math.cos(tau);
-      const oV = r * Math.sin(tau);
+      const r = Math.sqrt(u);
+      const oU = TUBE_THICK * r * Math.cos(tau);
+      const oV = TUBE_WIDE * r * Math.sin(tau);
       h.offsetU[i] = oU;
       h.offsetV[i] = oV;
 
@@ -395,10 +423,15 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       h.rotations[ix] = Math.random() * Math.PI * 2;
       h.rotations[ix + 1] = Math.random() * Math.PI * 2;
       h.rotations[ix + 2] = Math.random() * Math.PI * 2;
-      h.angVel[ix] = (Math.random() - 0.5) * 1.2;
-      h.angVel[ix + 1] = (Math.random() - 0.5) * 1.2;
-      h.angVel[ix + 2] = (Math.random() - 0.5) * 1.2;
-      h.scales[i] = 0.7 + Math.random() * 0.8;
+      h.angVel[ix] = (Math.random() - 0.5) * 3.6;
+      h.angVel[ix + 1] = (Math.random() - 0.5) * 3.6;
+      h.angVel[ix + 2] = (Math.random() - 0.5) * 3.6;
+      h.scales[i] = 0.25 + Math.random() * 1.55;
+      // ~FLICKER_FRACTION of particles are "sparklers": they pulse brighter +
+      // larger on their own cycle. freq 0 means a steady (non-flickering) one.
+      const sparkle = Math.random() < FLICKER_FRACTION;
+      h.flickerFreq[i] = sparkle ? 1.5 + Math.random() * 3.5 : 0;
+      h.flickerPhase[i] = Math.random() * Math.PI * 2;
       h.ages[i] = 0;
     };
 
@@ -418,6 +451,11 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       // InstancedMesh's bounding sphere is computed from instance 0 — disable
       // culling so the whole cloud doesn't pop when the seed wanders.
       mesh.frustumCulled = false;
+      // Per-instance color (white = no change) so the twinkle can brighten
+      // individual particles; rewritten each frame in stepHelix.
+      const initColor = new THREE.Color(1, 1, 1);
+      for (let i = 0; i < countPerHelix; i++) mesh.setColorAt(i, initColor);
+      mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
 
       const homeX = helixIndex === 0 ? -HOME_OFFSET : HOME_OFFSET;
       const homeY = 0;
@@ -433,6 +471,8 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
         ages: new Float32Array(countPerHelix),
         offsetU: new Float32Array(countPerHelix),
         offsetV: new Float32Array(countPerHelix),
+        flickerFreq: new Float32Array(countPerHelix),
+        flickerPhase: new Float32Array(countPerHelix),
         phase: helixIndex === 0 ? 0 : Math.PI,
         flowDir: helixIndex === 0 ? 1 : -1,
         homeX,
@@ -563,13 +603,16 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       const total = protons + neutrons;
       const offsets = clusterOffsets(total);
       for (let i = 0; i < total; i++) {
-        const c = i < protons ? PROTON_COLOR : NEUTRON_COLOR;
+        const isProton = i < protons;
+        const c = isProton ? PROTON_COLOR : NEUTRON_COLOR;
+        // Both nucleons are a rough, matte surface; they differ only in tint +
+        // self-emissive (protons glow red, neutrons a faint slate baseline).
         const mat = new THREE.MeshStandardMaterial({
           color: c,
           emissive: c,
-          emissiveIntensity: 0.25,
-          roughness: 0.5,
-          metalness: 0.1,
+          emissiveIntensity: isProton ? PROTON_GLOW : NEUTRON_EMISSIVE,
+          roughness: NUCLEON_ROUGHNESS,
+          metalness: NUCLEON_METALNESS,
           transparent: true,
         });
         mats.push(mat);
@@ -654,6 +697,7 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     scene.add(dModel.group, tModel.group, heModel.group);
 
     const dummy = new THREE.Object3D();
+    const flickerColor = new THREE.Color(); // reused for per-instance twinkle
     const seedMatrices = (h: Helix) => {
       for (let i = 0; i < countPerHelix; i++) {
         const ix = i * 3;
@@ -669,13 +713,17 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     seedMatrices(deuterium);
     seedMatrices(tritium);
 
-    // Post-processing: RenderPass → UnrealBloomPass → OutputPass. Bloom starts
-    // disabled and is enabled only during the reward window. OutputPass maps
-    // emissive HDR cleanly to LDR.
+    // Post-processing: RenderPass → AfterimagePass → UnrealBloomPass → OutputPass.
+    // Bloom starts disabled and is enabled only during the reward window.
+    // AfterimagePass adds the feedback trail (its damp is driven per-frame in the
+    // loop). OutputPass maps emissive HDR cleanly to LDR.
     const composer = new EffectComposer(renderer);
     composer.setPixelRatio(pixelRatio);
     composer.setSize(viewW, viewH);
     composer.addPass(new RenderPass(scene, camera));
+    const afterimagePass = new AfterimagePass();
+    afterimagePass.uniforms.damp.value = 0; // ramps up in the loop once camera is still
+    composer.addPass(afterimagePass);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(viewW, viewH),
       0,
@@ -694,7 +742,7 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       if (w === viewW && h === viewH) return;
       viewW = w;
       viewH = h;
-      renderer.setSize(w, h);
+      renderer.setSize(w, h, false); // CSS drives display size (see mount setSize)
       composer.setSize(w, h);
       bloomPass.setSize(w, h);
       const { halfW, halfH } = computeFrustum(w / h);
@@ -717,6 +765,13 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
     const nearVec = new THREE.Vector3();
     const farVec = new THREE.Vector3();
     let overlapSmoothed = 0;
+
+    // Afterimage trail gating: kill the trail (damp→0) while the camera moves so
+    // the whole frame doesn't smear; ease it back up when the camera is still.
+    const prevCamPos = camera.position.clone();
+    const prevCamQuat = camera.quaternion.clone();
+    let prevZoom = camera.zoom;
+    let trailDamp = 0;
 
     let stage: Stage = "idle";
     let stageTime = 0;
@@ -821,7 +876,20 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
             : age > LIFETIME - FADE
               ? (LIFETIME - age) / FADE
               : 1;
-        const s = h.scales[i] * fade;
+        let s = h.scales[i] * fade;
+
+        // Twinkle: sparklers pulse brighter (instanceColor multiplier) + larger
+        // on their own cycle. Non-sparklers (freq 0) stay white / unscaled.
+        let cm = 1;
+        const ff = h.flickerFreq[i];
+        if (ff > 0) {
+          const tw = Math.sin(tNoise * ff + h.flickerPhase[i]) * 0.5 + 0.5; // [0,1]
+          const pulse = tw * tw * tw * tw; // sharpen into brief flashes
+          cm = 1 + pulse * (FLICKER_BRIGHT - 1);
+          s *= 1 + pulse * 0.6;
+        }
+        flickerColor.setScalar(cm);
+        h.mesh.setColorAt(i, flickerColor);
 
         dummy.position.set(px, py, pz);
         dummy.rotation.set(rotX, rotY, rotZ);
@@ -830,6 +898,7 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
         h.mesh.setMatrixAt(i, dummy.matrix);
       }
       h.mesh.instanceMatrix.needsUpdate = true;
+      h.mesh.instanceColor!.needsUpdate = true;
     };
 
     // Ortho ray ∩ z=0 plane: unproject NDC at near and far, build a ray, solve
@@ -1094,6 +1163,10 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       tModel.group.position.set(tritium.centerX, tritium.centerY + MODEL_Y, 0);
       heModel.group.position.set(HE_MODEL_X, 0, 0);
       for (const model of [dModel, tModel, heModel]) {
+        // Slow turntable spin around the model's own vertical (Y) axis. The
+        // label sits on +Y, so spinning around Y keeps it anchored (and the
+        // sprite always faces the camera) while the nucleus + electrons turn.
+        model.group.rotation.y += MODEL_SPIN * dt;
         if (!model.group.visible) continue;
         for (const el of model.electrons) {
           el.angle += el.speed * dt;
@@ -1123,6 +1196,28 @@ export default function ParticleStage({ interactive }: { interactive: boolean })
       if (burst) {
         burst.style.opacity = locked ? "1" : "0";
       }
+
+      // Drive the afterimage trail: damp→0 when the camera is moving (orbit or
+      // scripted pan) so nothing smears, easing back to AFTERIMAGE_DAMP when it
+      // settles. Riding damp (not .enabled) avoids a stale ghost on re-enable —
+      // at damp≈0 the buffer just holds the current frame.
+      const camMoved =
+        camera.position.distanceTo(prevCamPos) > 1e-3 ||
+        camera.quaternion.angleTo(prevCamQuat) > 1e-4 ||
+        Math.abs(camera.zoom - prevZoom) > 1e-4;
+      prevCamPos.copy(camera.position);
+      prevCamQuat.copy(camera.quaternion);
+      prevZoom = camera.zoom;
+      // The trail belongs to the intro (draggable) page and the fusion reward
+      // window (flash/lock) only. During hand-driven demo interaction
+      // (idle/charging) the helices chase the user's moving hands, so the
+      // afterimage smears the tracked shapes — keep it off there. The camMoved
+      // gate is retained so fusion looks exactly as before.
+      const trailAllowed =
+        interactive || stage === "flash" || stage === "lock";
+      const dampTarget = trailAllowed && !camMoved ? AFTERIMAGE_DAMP : 0;
+      trailDamp += (dampTarget - trailDamp) * (1 - Math.exp(-8 * dt));
+      afterimagePass.uniforms.damp.value = trailDamp;
 
       composer.render();
       raf = requestAnimationFrame(loop);

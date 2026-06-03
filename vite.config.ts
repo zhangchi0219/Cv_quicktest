@@ -17,6 +17,7 @@ export default defineConfig({
           react: ["react", "react-dom"],
           mediapipe: ["@mediapipe/tasks-vision"],
           three: ["three"],
+          gsap: ["gsap", "@gsap/react"],
         },
       },
     },

@@ -35,30 +35,21 @@ body {
   border-right: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
-/* One stage at a time; keying by view replays this entrance on switch. */
+/* One stage at a time. The view's entrance is animated by GSAP (useGSAP in
+   App.tsx, keyed on `view`); keying by view also remounts the subtree so the
+   timeline replays on every intro/demo switch. */
 .sidebar-view {
   display: flex;
   flex-direction: column;
   gap: var(--s4);
   min-height: 100%; /* lets the intro CTA's margin-top:auto reach the bottom */
-  animation: viewIn 280ms ease both;
-}
-
-@keyframes viewIn {
-  from {
-    opacity: 0;
-    transform: translateX(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .stage-panel {
   position: relative; /* anchors the scene-load error fallback */
   height: 100vh;
   padding: var(--s4);
+  min-width: 0; /* let the 63fr grid column shrink below the canvas's size */
 }
 
 /* ── Sidebar typography ──────────────────────────────────────────────── */
@@ -76,6 +67,15 @@ body {
   flex-direction: column;
   gap: var(--s2);
   min-width: 0;
+}
+
+/* The subtitle/deck under the main title — a mono label sized ABOVE body so the
+   title→subtitle→body hierarchy reads. Scoped to .brand-text so functional
+   micro-labels (.back-link, .camera-select, .pip-status, 摄像头·CAMERA) stay at
+   the small --fs-label. */
+.brand-text .label {
+  font-size: var(--fs-subtitle);
+  font-weight: 700; /* heavier than the small meta labels */
 }
 
 .brand-title {
@@ -101,13 +101,15 @@ body {
   counter-reset: sec;
   display: flex;
   flex-direction: column;
-  font-size: 0.9rem; /* smaller description body */
+  font-size: 0.68rem; /* smaller description body */
 }
 
 .explainer h3 {
   counter-increment: sec;
   margin: var(--s4) 0 var(--s2);
-  font: 500 var(--fs-label) / 1.3 var(--font-mono);
+  /* Same single weight (300) as the body copy — no bold anywhere in the
+     explainer; the size + mono face + uppercase still mark it as a heading. */
+  font: 300 var(--fs-subtitle) / 1.3 var(--font-mono);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -133,7 +135,8 @@ body {
 }
 
 .explainer strong {
-  font-weight: 700;
+  /* No bold in the explainer copy — keep <strong> at the body weight (300). */
+  font-weight: 300;
 }
 
 .explainer code {
@@ -433,21 +436,25 @@ body {
     padding: var(--s4);
     border-right: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    /* Start the copy below the pinned scene (same 60vh as .stage-panel). */
+    margin-top: 60vh;
   }
   .stage-panel {
-    /* Shorter than the desktop full-height so the title + copy sit close under
-     * the scene instead of a full screen below it. */
-    height: 52vh;
+    /* Pin the scene to the top at 60vh; the copy scrolls below it. Being out of
+     * flow lets OrbitControls own touch on the canvas (drag to rotate / pinch to
+     * zoom) without fighting the page's vertical scroll. */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60vh;
     min-height: 300px;
-    padding: var(--s3);
-    order: -1; /* canvas first on mobile */
+    padding: 0;
+    z-index: 1;
   }
-  /* Let a vertical swipe scroll the page even when it starts on the scene.
-   * (On touch, OrbitControls is skipped, so nothing sets touch-action:none.) */
-  .stage-panel,
-  .particle-stage,
-  .particle-stage canvas {
-    touch-action: pan-y;
+  /* Square the pinned scene off to the screen edges (no rounded block). */
+  .particle-stage {
+    border-radius: 0;
   }
   .cta {
     margin-top: var(--s4);
@@ -459,7 +466,7 @@ body {
 /* Phones: trim the scene a touch more and keep the equation chip on one line. */
 @media (max-width: 480px) {
   .stage-panel {
-    height: 46vh;
+    height: 60vh;
   }
   .explainer p > code:only-child {
     font-size: 0.82rem;
